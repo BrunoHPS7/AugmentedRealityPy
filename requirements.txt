@@ -1,0 +1,11 @@
+# Visão Computacional
+opencv-contrib-python
+numpy
+open3d
+tqdm
+
+# Interface / Imagens
+Pillow
+
+# Backend / Comunicação
+PyYAML
