@@ -8,6 +8,7 @@ from tkinter import filedialog, messagebox, simpledialog
 from src.camera_calibration import run_calibration_process, exibir_marcador_na_tela
 from src.acquisition import save_video_frames_fps
 from src.reconstruction import run_colmap_reconstruction
+from src.visualization import run_3d_visualization
 
 
 # Padronizar os caminhos entre Sistemas Operacionais:
@@ -348,6 +349,8 @@ if __name__ == "__main__":
                     run_reconstruction_module(config)
         elif mode == "History":
             run_history_module(config)
+        elif mode == "Visualization":
+            run_3d_visualization()
         else:
             print(f"Modo '{mode}' desconhecido.")
     except KeyboardInterrupt:
