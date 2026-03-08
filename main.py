@@ -18,31 +18,56 @@ from src.visualization import renderizar_visualizacao_3d
 # --- UTILITÁRIOS DE INTERFACE ---
 
 def inicializar_tkinter_oculto():
+    """Inicializa uma instância do Tkinter sem exibir a janela principal."""
     raiz = tk.Tk()
     raiz.withdraw()
+    # Em alguns ambientes Linux, o topmost pode travar o diálogo atrás da IDE
+    # Se a janela não aparecer, comente a linha abaixo:
     raiz.attributes('-topmost', True)
     return raiz
 
 
 def pedir_diretorio(titulo: str, caminho_inicial: Path) -> Optional[Path]:
     raiz = inicializar_tkinter_oculto()
-    # Só tenta usar o diretório inicial se ele realmente existir (evita pastas fantasmas)
-    diretorio_busca = str(caminho_inicial) if caminho_inicial.exists() else "."
+
+    # Resolve para caminho absoluto
+    caminho_abs = caminho_inicial.resolve()
+
+    # Se a pasta do YAML não existir, avisa no terminal e usa o diretório atual
+    if not caminho_abs.exists():
+        print(f"[AVISO] Pasta não encontrada: {caminho_abs}")
+        print(f"Verifique se o nome no config.yaml está idêntico ao da pasta no PyCharm.")
+        diretorio_busca = os.getcwd()
+    else:
+        diretorio_busca = str(caminho_abs)
+
     escolha = filedialog.askdirectory(initialdir=diretorio_busca, title=titulo)
     raiz.destroy()
     return Path(escolha) if escolha else None
 
 
-def pedir_arquivo(titulo: str, caminho_inicial: Path, tipos: list) -> Optional[Path]:
+def pedir_arquivo(titulo: str, caminho_inicial: Path, tipos: list = None) -> Optional[Path]:
     raiz = inicializar_tkinter_oculto()
-    # Só tenta usar o diretório inicial se ele realmente existir
-    diretorio_busca = str(caminho_inicial) if caminho_inicial.exists() else "."
-    escolha = filedialog.askopenfilename(initialdir=diretorio_busca, title=titulo, filetypes=tipos)
+
+    caminho_abs = caminho_inicial.resolve()
+    diretorio_busca = str(caminho_abs) if caminho_abs.exists() else os.getcwd()
+
+    if not tipos:
+        tipos = [("Vídeos", "*.mp4 *.avi *.mkv *.mov"), ("Todos os Arquivos", "*.*")]
+
+    escolha = filedialog.askopenfilename(
+        initialdir=diretorio_busca,
+        title=titulo,
+        filetypes=tipos
+    )
+
     raiz.destroy()
     return Path(escolha) if escolha else None
 
 
 def carregar_yaml(caminho: Path = Path("config.yaml")) -> Dict[str, Any]:
+    if not caminho.exists():
+        raise FileNotFoundError(f"Arquivo de configuração '{caminho}' não encontrado.")
     with open(caminho, "r", encoding="utf-8") as arquivo:
         return yaml.safe_load(arquivo)
 
@@ -56,6 +81,7 @@ def abrir_pasta_os(caminho: Path):
         elif sistema == "Darwin":
             subprocess.run(["open", str(caminho)])
         else:
+            # Comando padrão para a maioria das distros Linux
             subprocess.run(["xdg-open", str(caminho)], check=True)
     except Exception as e:
         print(f"[ERRO] Falha ao abrir pasta: {e}")
@@ -90,10 +116,14 @@ def processar_calibracao(cfg: Dict[str, Any]) -> bool:
 def processar_extracao(cfg: Dict[str, Any]) -> bool:
     """2. Aquisição: Transforma vídeo em frames."""
     print("\n--- MODO: EXTRAÇÃO DE FRAMES (OpenCV) ---")
+
+    # Garantir que a pasta de entrada exista no sistema de arquivos
     pasta_entrada = Path(cfg["paths"]["video_input"])
 
-    caminho_video = pedir_arquivo("Selecione o Vídeo", pasta_entrada, [("Vídeos", "*.mp4 *.avi *.mkv")])
-    if not caminho_video: return False
+    caminho_video = pedir_arquivo("Selecione o Vídeo", pasta_entrada)
+    if not caminho_video:
+        print("[AVISO] Nenhum vídeo selecionado.")
+        return False
 
     nome_projeto = input("Nome da pasta do projeto (ex: objeto_01): ").strip()
     if not nome_projeto: return False
@@ -108,7 +138,7 @@ def processar_extracao(cfg: Dict[str, Any]) -> bool:
 
 
 def processar_reconstrucao(cfg: Dict[str, Any]) -> bool:
-    """3. Reconstrução: Processa frames no COLMAP para gerar nuvem de pontos."""
+    """3. Reconstrução: Processa frames no COLMAP."""
     print("\n--- MODO: RECONSTRUÇÃO 3D (COLMAP) ---")
     pasta_base_frames = Path(cfg["paths"]["frames_output"])
 
@@ -158,9 +188,11 @@ if __name__ == "__main__":
         }
 
         if modo in mapeamento_modos:
-            mapeamento_modos[modo](config)
+            sucesso = mapeamento_modos[modo](config)
+            if sucesso:
+                print("\n[SUCESSO] Operação concluída.")
         elif modo == "History":
-            abrir_pasta_os(Path(config["paths"]["colmap_output"]).parent)
+            abrir_pasta_os(Path(config["paths"]["colmap_output"]))
         else:
             print(f"\n[AVISO] Modo '{modo}' não reconhecido no config.yaml.")
 
@@ -168,4 +200,4 @@ if __name__ == "__main__":
         print("\n\n[SISTEMA] Interrompido pelo usuário. Saindo...")
         sys.exit(0)
     except Exception as e:
-        print(f"\n[FALHA CRÍTICA] {e}")
+        print(f"\n[FALHA CRÍTICA] Ocorreu um erro inesperado: {e}")

@@ -1,30 +1,25 @@
-# Pipeline de Execução (Ordem Lógica):
+ # Pipeline de Execução (Ordem Lógica):
 # "CameraCalibration" -> "OpenCV" -> "Reconstruction" -> "Visualization"
 # Modos Adicionais: "Full", "History"
 execution_mode: "Visualization"
 
-# --- Configurações de Caminhos (Paths) ---
 paths:
-  # 1. Calibração
-  calibration_images: "./data/in/images_calibration"
-  calibration_output_folder: "./data/out/calibrations"
+  # 1. Calibração (Ajustado para o plural 'calibrations' como no seu print)
+  calibration_images: "data/in/images_calibrations"
+  calibration_output_folder: "data/out/calibrations"
 
-  # 2. Extração de Frames (OpenCV)
-  video_input: "./data/in/videos"
-  frames_output: "./data/out/frames"
+  # 2. Extração de Frames
+  video_input: "data/in/videos"
+  frames_output: "data/out/frames"
 
-  # 3. Reconstrução (Colmap)
-  colmap_input: "./data/out/frames"
-  colmap_output: "./data/out/reconstructions"
-  resources: "./resources"
+  # 3. Reconstrução
+  colmap_input: "data/out/frames"
+  colmap_output: "data/out/reconstructions"
+  resources: "resources"
 
-# --- Parâmetros Técnicos dos Módulos ---
 parameters:
-  # Configurações do Tabuleiro de Xadrez
   calibration:
     checkerboard_size: [9, 6]
     square_size: 25.0
-
-  # Configurações de Captura
   acquisition:
     desired_fps: 5
