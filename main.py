@@ -1,358 +1,171 @@
-import yaml
-import sys
-import platform
 import os
+import sys
+import yaml
+import platform
 import subprocess
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog
-from src.camera_calibration import run_calibration_process, exibir_marcador_na_tela
-from src.acquisition import save_video_frames_fps
-from src.reconstruction import run_colmap_reconstruction
-from src.visualization import run_3d_visualization
+from pathlib import Path
+from tkinter import filedialog
+from typing import Dict, Any, Optional
+
+# Módulos internos ordenados por fluxo lógico
+from src.camera_calibration import executar_fluxo_calibracao_camera
+from src.acquisition import extrair_e_salvar_frames_por_segundo
+from src.reconstruction import executar_pipeline_reconstrucao_3d
+from src.visualization import renderizar_visualizacao_3d
 
 
-# Padronizar os caminhos entre Sistemas Operacionais:
-def normalize_path(p):
-    return p.replace("\\", "/")
+# --- UTILITÁRIOS DE INTERFACE ---
+
+def inicializar_tkinter_oculto():
+    raiz = tk.Tk()
+    raiz.withdraw()
+    raiz.attributes('-topmost', True)
+    return raiz
 
 
-# Seleção de PASTA casual para calibração
-def selecionar_pasta_fotos_calibracao():
+def pedir_diretorio(titulo: str, caminho_inicial: Path) -> Optional[Path]:
+    raiz = inicializar_tkinter_oculto()
+    # Só tenta usar o diretório inicial se ele realmente existir (evita pastas fantasmas)
+    diretorio_busca = str(caminho_inicial) if caminho_inicial.exists() else "."
+    escolha = filedialog.askdirectory(initialdir=diretorio_busca, title=titulo)
+    raiz.destroy()
+    return Path(escolha) if escolha else None
+
+
+def pedir_arquivo(titulo: str, caminho_inicial: Path, tipos: list) -> Optional[Path]:
+    raiz = inicializar_tkinter_oculto()
+    # Só tenta usar o diretório inicial se ele realmente existir
+    diretorio_busca = str(caminho_inicial) if caminho_inicial.exists() else "."
+    escolha = filedialog.askopenfilename(initialdir=diretorio_busca, title=titulo, filetypes=tipos)
+    raiz.destroy()
+    return Path(escolha) if escolha else None
+
+
+def carregar_yaml(caminho: Path = Path("config.yaml")) -> Dict[str, Any]:
+    with open(caminho, "r", encoding="utf-8") as arquivo:
+        return yaml.safe_load(arquivo)
+
+
+def abrir_pasta_os(caminho: Path):
+    caminho.mkdir(parents=True, exist_ok=True)
     sistema = platform.system()
-    home = os.path.expanduser("~")
-    titulo = "Seleção de Pasta"
-    instrucao = "Por favor, selecione a PASTA que contém as Fotos para Calibração."
-
-    if sistema == "Linux":
-        try:
-            # Notificação visual via Zenity
-            subprocess.run(["zenity", "--info", "--title=" + titulo, "--text=" + instrucao, "--width=350"], check=False)
-
-            # Seletor de diretório iniciando na HOME (padrão Nautilus)
-            comando = [
-                "zenity", "--file-selection", "--directory",
-                "--title=" + titulo,
-                f"--filename={home}/"
-            ]
-            caminho = subprocess.check_output(comando, stderr=subprocess.DEVNULL).decode("utf-8").strip()
-            return caminho if caminho else None
-        except:
-            return None
-
-    # LÓGICA WINDOWS / FALLBACK
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes('-topmost', True)
-    messagebox.showinfo(titulo, instrucao)
-    caminho = filedialog.askdirectory(initialdir=home, title=titulo)
-    root.destroy()
-    return caminho if caminho else None
-
-
-# Seleção do video usado na extração de frames:
-def selecionar_arquivo_video():
-    sistema = platform.system()
-    home = os.path.expanduser("~")
-    titulo = "Seleção de Vídeo"
-    mensagem = "Por favor, selecione o arquivo de vídeo para a extração de frames."
-
-    if sistema == "Linux":
-        try:
-            subprocess.run(["zenity", "--info", "--title=" + titulo, "--text=" + mensagem, "--width=300"], check=False)
-            comando = [
-                "zenity", "--file-selection",
-                "--title=" + titulo,
-                "--file-filter=Vídeos | *.mp4 *.avi *.mkv *.mov",
-                f"--filename={home}/"
-            ]
-            caminho = subprocess.check_output(comando, stderr=subprocess.DEVNULL).decode("utf-8").strip()
-            return caminho if caminho else None
-        except:
-            return None
-
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes('-topmost', True)
-    messagebox.showinfo(titulo, mensagem)
-    caminho = filedialog.askopenfilename(
-        initialdir=home,
-        title=titulo,
-        filetypes=[("Arquivos de Vídeo", "*.mp4 *.avi *.mkv *.mov")]
-    )
-    root.destroy()
-    return caminho if caminho else None
-
-
-# Abre a pasta data/out (Histórico):
-def abrir_pasta_historico():
-    sistema = platform.system()
-    caminho_historico = os.path.abspath("./data/out")
-    if not os.path.exists(caminho_historico):
-        os.makedirs(caminho_historico, exist_ok=True)
-
     try:
         if sistema == "Windows":
-            os.startfile(caminho_historico)
+            os.startfile(caminho)
         elif sistema == "Darwin":
-            subprocess.run(["open", caminho_historico])
+            subprocess.run(["open", str(caminho)])
         else:
-            subprocess.run(["xdg-open", caminho_historico], check=True)
+            subprocess.run(["xdg-open", str(caminho)], check=True)
     except Exception as e:
-        print(f"Erro ao abrir o gerenciador de arquivos: {e}")
+        print(f"[ERRO] Falha ao abrir pasta: {e}")
 
 
-# Carrega as configurações:
-def load_config(path="config.yaml"):
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+# --- PROCESSADORES (ORDEM LÓGICA DE EXECUÇÃO) ---
 
+def processar_calibracao(cfg: Dict[str, Any]) -> bool:
+    """1. Calibração: Gera os parâmetros intrínsecos da câmera."""
+    print("\n--- MODO: CALIBRAÇÃO DE CÂMERA ---")
 
-# Módulo de Calibração:
-def run_calibration_module(cfg):
-    print("\n=== MÓDULO: CAMERA CALIBRATION ===")
+    pasta_base_fotos = Path(cfg["paths"]["calibration_images"])
+    pasta_fotos = pedir_diretorio("Selecione a pasta com as fotos do tabuleiro", pasta_base_fotos)
+    if not pasta_fotos: return False
 
-    # 1. Instância base única e oculta para evitar janelas "tk" vazias
-    root_master = tk.Tk()
-    root_master.withdraw()
-    root_master.attributes('-topmost', True)
+    nome_arquivo = input("Digite um nome para o arquivo de saída (ex: camera_pro): ").strip()
+    if not nome_arquivo: return False
 
-    ja_tem = messagebox.askyesno("Calibração", "Você já possui uma pasta com as Fotos para Calibração?",
-                                 parent=root_master)
+    pasta_saida = Path(cfg["paths"]["calibration_output_folder"])
+    caminho_final = pasta_saida / (nome_arquivo if nome_arquivo.endswith('.npz') else f"{nome_arquivo}.npz")
 
-    dims = tuple(cfg["parameters"]["calibration"]["checkerboard_size"])
-    square_size_padrao = cfg["parameters"]["calibration"]["square_size"]
-
-    if not ja_tem:
-        tutorial = (
-            "TUTORIAL DE CAPTURA:\n\n"
-            "1. Um tabuleiro abrirá em TELA CHEIA.\n"
-            "2. Meça o lado de um quadrado preto com uma régua.\n"
-            "(A medida será necessária)\n"
-            "3. Tire aproximadamente 10 fotos de diferentes angulos da tela de seu monitor com o tabulueiro.\n"
-            "4. Aperte qualquer tecla para fechar o tabuleiro.\n"
-            "5. Crie um pasta em seu computador e insira essas fotos.\n\n"
-            "Exibir tabuleiro agora?"
-        )
-
-        if messagebox.askyesno("TUTORIAL DE CALIBRAÇÃO", tutorial, parent=root_master):
-            # AQUI ESTAVA O ERRO: Adicionei o parametro root_parent=root_master
-            # Isso faz o código "esperar" você fechar o tabuleiro antes de pedir a medida.
-            exibir_marcador_na_tela(dims, root_parent=root_master)
-        else:
-            root_master.destroy()
+    if caminho_final.exists():
+        if input(f"Arquivo '{caminho_final.name}' já existe. Sobrescrever? (s/n): ").lower() != 's':
             return False
 
-    # 2. Entrada do tamanho do quadrado
-    square_size = simpledialog.askfloat(
-        "Medida do Quadrado",
-        "Insira o tamanho medido de um dos quadrados (em mm):",
-        initialvalue=square_size_padrao,
-        parent=root_master)
+    dimensoes = tuple(cfg["parameters"]["calibration"]["checkerboard_size"])
+    tamanho_quadrado = float(cfg["parameters"]["calibration"]["square_size"])
 
-    if square_size is None:
-        messagebox.showerror("Erro de Entrada", "Medida não inserida. O processo foi interrompido.", parent=root_master)
-        root_master.destroy()
-        return False
-
-    # 3. Seleção da pasta de fotos
-    pasta_final = selecionar_pasta_fotos_calibracao()
-
-    if not pasta_final:
-        messagebox.showerror("Erro de Calibração", "Nenhuma pasta foi selecionada. O processo foi interrompido.",
-                             parent=root_master)
-        root_master.destroy()
-        return False
-
-    # 4. TRATAMENTO: Verificar se a pasta contém fotos válidas (evitar vídeos/pastas vazias)
-    extensoes_fotos = ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.JPG', '.JPEG', '.PNG')
-    try:
-        arquivos_na_pasta = os.listdir(pasta_final)
-        fotos_encontradas = [f for f in arquivos_na_pasta if f.lower().endswith(extensoes_fotos)]
-
-        if not fotos_encontradas:
-            messagebox.showerror("Erro de Arquivos",
-                                 "Nenhuma foto encontrada na pasta selecionada!\n\n"
-                                 "Certifique-se de que a pasta contém imagens. Vídeos não são aceitos aqui.",
-                                 parent=root_master)
-            root_master.destroy()
-            return False
-    except Exception as e:
-        messagebox.showerror("Erro de Acesso", f"Erro ao ler a pasta: {e}", parent=root_master)
-        root_master.destroy()
-        return False
-
-    # 5. Configurações para o processamento técnico
-    settings = {
-        "chessboard_size": dims,
-        "square_size": square_size,
-        "calibration_folder": normalize_path(pasta_final),
-        "output_folder": normalize_path(cfg["paths"]["calibration_output_folder"])
-    }
-
-    # Fecha o root_master antes do processamento pesado para limpar a memória da interface
-    root_master.destroy()
-
-    # Chama o processamento
-    run_calibration_process(settings)
-
-    return True
+    return executar_fluxo_calibracao_camera(pasta_fotos, pasta_saida, dimensoes, tamanho_quadrado, nome_arquivo)
 
 
-# Módulo de Extração:
-def run_opencv_module(cfg):
-    print("\n=== MÓDULO: OPENCV (EXTRAÇÃO) ===")
+def processar_extracao(cfg: Dict[str, Any]) -> bool:
+    """2. Aquisição: Transforma vídeo em frames."""
+    print("\n--- MODO: EXTRAÇÃO DE FRAMES (OpenCV) ---")
+    pasta_entrada = Path(cfg["paths"]["video_input"])
 
-    # Criamos a instância base oculta para evitar janelas "fantasmas"
-    root_master = tk.Tk()
-    root_master.withdraw()
+    caminho_video = pedir_arquivo("Selecione o Vídeo", pasta_entrada, [("Vídeos", "*.mp4 *.avi *.mkv")])
+    if not caminho_video: return False
 
-    video_escolhido = selecionar_arquivo_video()
+    nome_projeto = input("Nome da pasta do projeto (ex: objeto_01): ").strip()
+    if not nome_projeto: return False
 
-    # 1. TRATAMENTO: Caso o usuário cancele a seleção
-    if not video_escolhido:
-        messagebox.showerror("Erro de Seleção", "Nenhum vídeo foi selecionado. A extração foi cancelada.")
-        root_master.destroy()
-        return False
+    pasta_saida = Path(cfg["paths"]["frames_output"]) / nome_projeto
+    if pasta_saida.exists():
+        print("[AVISO] Pasta já existe. Os frames serão mesclados ou sobrescritos.")
 
-    # 2. TRATAMENTO: Verificar se o arquivo tem formato de vídeo válido
-    extensoes_validas = ('.mp4', '.avi', '.mkv', '.mov', '.mpg', '.mpeg')
-    if not video_escolhido.lower().endswith(extensoes_validas):
-        tipos_str = ", ".join(extensoes_validas)
-        messagebox.showerror("Arquivo Inválido",
-                             f"O arquivo selecionado não é um vídeo válido.\n\n"
-                             f"Tipos aceitos: {tipos_str}")
-        root_master.destroy()
-        return False
-
-    base_out = cfg["paths"]["frames_output"]
-    if not os.path.exists(base_out):
-        os.makedirs(base_out, exist_ok=True)
-
-    while True:
-        # 3. Solicita o nome do projeto
-        nome_pasta = simpledialog.askstring(
-            "Pasta de Saída",
-            "Digite um nome para a pasta dos frames:",
-            initialvalue="projeto_frames",
-            parent=root_master)
-
-        if not nome_pasta:
-            messagebox.showerror("Erro de Entrada", "Nome da pasta não definido. A extração foi cancelada.")
-            root_master.destroy()
-            return False
-
-        caminho_frames = os.path.join(base_out, nome_pasta)
-
-        # 4. Verifica se o nome já existe (com lista rolável)
-        if os.path.exists(caminho_frames):
-            existentes = [d for d in os.listdir(base_out) if os.path.isdir(os.path.join(base_out, d))]
-
-            root_erro = tk.Toplevel(root_master)
-            root_erro.title("Erro: Nome já existe")
-            root_erro.geometry("400x350")
-            root_erro.attributes('-topmost', True)
-            root_erro.grab_set()
-
-            sw, sh = root_erro.winfo_screenwidth(), root_erro.winfo_screenheight()
-            root_erro.geometry(f"400x350+{int(sw / 2 - 200)}+{int(sh / 2 - 175)}")
-
-            tk.Label(root_erro, text=f"O nome '{nome_pasta}' já está em uso!",
-                     font=("Arial", 11, "bold"), fg="red", pady=10).pack()
-
-            tk.Label(root_erro, text="Projetos existentes:", font=("Arial", 10)).pack(anchor="w", padx=20)
-
-            frame_lista = tk.Frame(root_erro)
-            frame_lista.pack(expand=True, fill='both', padx=20, pady=5)
-
-            scrollbar = tk.Scrollbar(frame_lista)
-            scrollbar.pack(side="right", fill="y")
-
-            lista_box = tk.Listbox(frame_lista, yscrollcommand=scrollbar.set, font=("Consolas", 10))
-            for item in sorted(existentes):
-                lista_box.insert("end", f" • {item}")
-            lista_box.pack(expand=True, fill='both')
-            scrollbar.config(command=lista_box.yview)
-
-            tk.Label(root_erro, text="Deseja tentar outro nome?", pady=10).pack()
-
-            resposta = tk.BooleanVar(value=False)
-
-            def decidir(valor):
-                resposta.set(valor)
-                root_erro.destroy()
-
-            btn_frame = tk.Frame(root_erro)
-            btn_frame.pack(pady=(0, 20))
-            tk.Button(btn_frame, text="Sim, tentar novamente", width=20, command=lambda: decidir(True)).pack(
-                side="left", padx=5)
-            tk.Button(btn_frame, text="Não, cancelar", width=15, command=lambda: decidir(False)).pack(side="left",
-                                                                                                      padx=5)
-
-            root_erro.wait_window()
-
-            if not resposta.get():
-                root_master.destroy()
-                return False
-            continue
-
-        break
-
-    root_master.destroy()
-
-    # 5. Execução da extração
-    save_video_frames_fps(
-        video_path=normalize_path(video_escolhido),
-        output_dir=normalize_path(caminho_frames),
-        desired_fps=cfg["parameters"]["acquisition"]["desired_fps"]
+    return extrair_e_salvar_frames_por_segundo(
+        caminho_video, pasta_saida, cfg["parameters"]["acquisition"]["desired_fps"]
     )
+
+
+def processar_reconstrucao(cfg: Dict[str, Any]) -> bool:
+    """3. Reconstrução: Processa frames no COLMAP para gerar nuvem de pontos."""
+    print("\n--- MODO: RECONSTRUÇÃO 3D (COLMAP) ---")
+    pasta_base_frames = Path(cfg["paths"]["frames_output"])
+
+    pasta_frames = pedir_diretorio("Selecione a pasta de frames", pasta_base_frames)
+    if not pasta_frames: return False
+
+    nome_projeto = input("Nome para esta reconstrução (ex: modelo_final): ").strip()
+    if not nome_projeto: return False
+
+    pasta_saida = Path(cfg["paths"]["colmap_output"]) / nome_projeto
+    if pasta_saida.exists():
+        print("[ERRO] Este nome de reconstrução já foi usado.")
+        return False
+
+    return executar_pipeline_reconstrucao_3d(pasta_frames, pasta_saida)
+
+
+def processar_visualizacao(cfg: Dict[str, Any]) -> bool:
+    """4. Visualização: Renderiza o resultado final (PLY/OBJ)."""
+    print("\n--- MODO: VISUALIZAÇÃO 3D ---")
+    pasta_base = Path(cfg["paths"]["colmap_output"])
+
+    caminho_modelo = pedir_arquivo("Selecione o Modelo 3D", pasta_base, [("Modelos 3D", "*.ply *.obj")])
+    if not caminho_modelo: return False
+
+    renderizar_visualizacao_3d(caminho_modelo)
     return True
 
 
-# Módulo de Reconstrução:
-def run_reconstruction_module(cfg):
-    print("\n=== MÓDULO: RECONSTRUCTION (COLMAP) ===")
+# --- FLUXO PRINCIPAL ---
 
-    # Garantimos que estamos pegando a chave correta conforme o YAML
-    # Se a chave colmap_input não existir, ele usa o frames_output como fallback
-    input_dir = cfg["paths"].get("colmap_input", cfg["paths"]["frames_output"])
-    output_dir = cfg["paths"]["colmap_output"]
-    resources = cfg["paths"]["resources"]
-
-    run_colmap_reconstruction(
-        normalize_path(input_dir),
-        normalize_path(output_dir),
-        normalize_path(resources)
-    )
-    return True
-
-
-# Módulo de Histórico:
-def run_history_module(cfg):
-    abrir_pasta_historico()
-
-
-# Pipeline Principal:
 if __name__ == "__main__":
-    config = load_config()
-    mode = config.get("execution_mode", "OpenCV")
-    print(f"Sistema: {platform.system()} | Modo: {mode}")
-
     try:
-        if mode == "CameraCalibration":
-            run_calibration_module(config)
-        elif mode == "OpenCV":
-            run_opencv_module(config)
-        elif mode == "Reconstruction":
-            run_reconstruction_module(config)
-        elif mode == "Full":
-                if run_opencv_module(config):
-                    run_reconstruction_module(config)
-        elif mode == "History":
-            run_history_module(config)
-        elif mode == "Visualization":
-            run_3d_visualization()
+        config = carregar_yaml()
+        modo = config.get("execution_mode", "OpenCV")
+
+        print("\n" + "=" * 45)
+        print(f" SISTEMA DE RECONSTRUÇÃO 3D - UFOP/ICEA")
+        print(f" SO: {platform.system()} | Modo Ativo: {modo}")
+        print("=" * 45)
+
+        mapeamento_modos = {
+            "CameraCalibration": processar_calibracao,
+            "OpenCV": processar_extracao,
+            "Reconstruction": processar_reconstrucao,
+            "Visualization": processar_visualizacao,
+        }
+
+        if modo in mapeamento_modos:
+            mapeamento_modos[modo](config)
+        elif modo == "History":
+            abrir_pasta_os(Path(config["paths"]["colmap_output"]).parent)
         else:
-            print(f"Modo '{mode}' desconhecido.")
+            print(f"\n[AVISO] Modo '{modo}' não reconhecido no config.yaml.")
+
     except KeyboardInterrupt:
-        print("\nSaindo...")
+        print("\n\n[SISTEMA] Interrompido pelo usuário. Saindo...")
         sys.exit(0)
+    except Exception as e:
+        print(f"\n[FALHA CRÍTICA] {e}")
