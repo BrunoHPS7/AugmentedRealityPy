@@ -2,6 +2,7 @@ import subprocess
 import logging
 from pathlib import Path
 from tqdm import tqdm
+from typing import Optional
 
 
 def configurar_logging(caminho_projeto: Path) -> Path:
@@ -35,10 +36,10 @@ def executar_comando(comando_shell: str):
         raise subprocess.CalledProcessError(processo.returncode, comando_shell)
 
 
-def executar_pipeline_reconstrucao_3d(pasta_frames: Path, pasta_projeto_saida: Path) -> bool:
+def executar_pipeline_reconstrucao_3d(pasta_frames: Path, pasta_projeto_saida: Path, caminho_calib: Optional[Path] = None) -> bool:
     """Pipeline COLMAP em 7 etapas com log no arquivo e progresso no terminal."""
 
-    CONFIG = {"threads": 6, "use_gpu": 1, "max_img_size": 4000}
+    CONFIG = {"threads": 6, "use_gpu": 0, "max_img_size": 4000}
 
     pasta_projeto_saida.mkdir(parents=True, exist_ok=True)
     arquivo_log = configurar_logging(pasta_projeto_saida)
@@ -54,12 +55,25 @@ def executar_pipeline_reconstrucao_3d(pasta_frames: Path, pasta_projeto_saida: P
     pasta_esparsa.mkdir(exist_ok=True)
     pasta_densa.mkdir(exist_ok=True)
 
+    # --- LÓGICA DE CALIBRAÇÃO MANUAL ---
+    flags_calib_extractor = ""
+    flags_calib_mapper = ""
+
+    if caminho_calib and caminho_calib.exists():
+        params = caminho_calib.read_text().strip()
+        flags_calib_extractor = (
+            f" --ImageReader.single_camera 1"
+            f" --ImageReader.camera_model OPENCV"
+            f" --ImageReader.camera_params {params}"
+        )
+        flags_calib_mapper = " --Mapper.ba_refine_focal_length 0 --Mapper.ba_refine_extra_params 0"
+
     etapas = [
-        (f"colmap feature_extractor --database_path {db_path} --image_path {dir_img} --SiftExtraction.use_gpu {CONFIG['use_gpu']}",
+        (f"colmap feature_extractor --database_path {db_path} --image_path {dir_img} --SiftExtraction.use_gpu {CONFIG['use_gpu']}{flags_calib_extractor}",
          "Extração de Features"),
         (f"colmap exhaustive_matcher --database_path {db_path} --SiftMatching.use_gpu {CONFIG['use_gpu']}",
          "Matcher Exaustivo"),
-        (f"colmap mapper --database_path {db_path} --image_path {dir_img} --output_path \"{pasta_esparsa.resolve()}\"",
+        (f"colmap mapper --database_path {db_path} --image_path {dir_img} --output_path \"{pasta_esparsa.resolve()}\"{flags_calib_mapper}",
          "Reconstrução Esparsa"),
         (f"colmap image_undistorter --image_path {dir_img} --input_path \"{pasta_esparsa.resolve() / '0'}\" --output_path \"{pasta_densa.resolve()}\" --output_type COLMAP",
          "Retificação de Imagens"),

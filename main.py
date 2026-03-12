@@ -142,8 +142,17 @@ def processar_reconstrucao(cfg: Dict[str, Any]) -> bool:
     print("\n--- MODO: RECONSTRUÇÃO 3D (COLMAP) ---")
     pasta_base_frames = Path(cfg["paths"]["frames_output"])
 
+    # 1. Seleciona os frames
     pasta_frames = pedir_diretorio("Selecione a pasta de frames", pasta_base_frames)
     if not pasta_frames: return False
+
+    # 2. NOVO: Seleciona o arquivo de calibração .txt
+    pasta_base_calib = Path(cfg["paths"]["calibration_output_folder"])
+    caminho_calib = pedir_arquivo("Selecione a calibração (.txt)", pasta_base_calib,
+                                  [("Arquivo de Calibração", "*.txt")])
+    if not caminho_calib:
+        print("[AVISO] Nenhuma calibração selecionada. O COLMAP tentará calibração automática.")
+        # Você pode decidir se retorna False ou continua sem calibração manual
 
     nome_projeto = input("Nome para esta reconstrução (ex: modelo_final): ").strip()
     if not nome_projeto: return False
@@ -153,7 +162,8 @@ def processar_reconstrucao(cfg: Dict[str, Any]) -> bool:
         print("[ERRO] Este nome de reconstrução já foi usado.")
         return False
 
-    return executar_pipeline_reconstrucao_3d(pasta_frames, pasta_saida)
+    # Passamos o caminho do txt para a pipeline
+    return executar_pipeline_reconstrucao_3d(pasta_frames, pasta_saida, caminho_calib)
 
 
 def processar_visualizacao(cfg: Dict[str, Any]) -> bool:
