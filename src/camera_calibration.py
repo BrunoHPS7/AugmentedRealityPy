@@ -73,15 +73,21 @@ def executar_fluxo_calibracao_camera(
     if sucesso_calib:
         diretorio_saida.mkdir(parents=True, exist_ok=True)
 
-        # Garante a extensão correta
-        if not nome_arquivo_saida.endswith('.npz'):
-            nome_arquivo_saida += '.npz'
+        # 1. Extrair os parâmetros na ordem: fx, fy, cx, cy, k1, k2, p1, p2
+        fx = matriz_camera[0, 0]
+        fy = matriz_camera[1, 1]
+        cx = matriz_camera[0, 2]
+        cy = matriz_camera[1, 2]
+        k1, k2, p1, p2 = distorcao.ravel()[:4]
 
-        caminho_final = diretorio_saida / nome_arquivo_saida
+        # 2. Formatar a string (usando 12 casas decimais para garantir precisão)
+        params_colmap = f"{fx:.12f},{fy:.12f},{cx:.12f},{cy:.12f},{k1:.12f},{k2:.12f},{p1:.12f},{p2:.12f}"
 
-        np.savez(str(caminho_final), mtx=matriz_camera, dist=distorcao)
-        print(f"[SUCESSO] Calibração finalizada! Arquivo salvo em: {caminho_final}")
+        # 3. Escrita do arquivo
+        caminho_final = (diretorio_saida / nome_arquivo_saida).with_suffix('.txt')
+        caminho_final.write_text(params_colmap)
+
+        print(f"\n[SUCESSO] Parâmetros salvos para COLMAP: {caminho_final.name}")
+        print(f"Valores: {params_colmap}")
+
         return True
-    else:
-        print("\n[ERRO] Falha no algoritmo de calibração do OpenCV.")
-        return False
