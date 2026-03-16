@@ -36,10 +36,11 @@ def executar_comando(comando_shell: str):
         raise subprocess.CalledProcessError(processo.returncode, comando_shell)
 
 
-def executar_pipeline_reconstrucao_3d(pasta_frames: Path, pasta_projeto_saida: Path, caminho_calib: Optional[Path] = None) -> bool:
-    """Pipeline COLMAP em 7 etapas com log no arquivo e progresso no terminal."""
+def executar_pipeline_reconstrucao_3d(pasta_frames: Path, pasta_projeto_saida: Path,
+                                      caminho_calib: Optional[Path] = None) -> bool:
+    """Pipeline COLMAP em 7 etapas com suporte automático para Mono e Stereo via pastas."""
 
-    CONFIG = {"threads": 6, "use_gpu": 0, "max_img_size": 4000}
+    CONFIG = {"threads": -1, "use_gpu": 1, "max_img_size": 4000}
 
     pasta_projeto_saida.mkdir(parents=True, exist_ok=True)
     arquivo_log = configurar_logging(pasta_projeto_saida)
@@ -55,31 +56,69 @@ def executar_pipeline_reconstrucao_3d(pasta_frames: Path, pasta_projeto_saida: P
     pasta_esparsa.mkdir(exist_ok=True)
     pasta_densa.mkdir(exist_ok=True)
 
-    # --- LÓGICA DE CALIBRAÇÃO MANUAL ---
+    # --- LÓGICA DE DETECÇÃO AUTOMÁTICA POR CONTEÚDO DE PASTA (MONO vs STEREO) ---
     flags_calib_extractor = ""
     flags_calib_mapper = ""
 
-    if caminho_calib and caminho_calib.exists():
-        params = caminho_calib.read_text().strip()
-        flags_calib_extractor = (
-            f" --ImageReader.single_camera 1"
-            f" --ImageReader.camera_model OPENCV"
-            f" --ImageReader.camera_params {params}"
-        )
+    if caminho_calib and caminho_calib.exists() and caminho_calib.is_dir():
+        # Busca assinaturas de arquivos para decidir o modo
+        arquivos_A = list(caminho_calib.glob("*_A.txt"))
+        arquivos_B = list(caminho_calib.glob("*_B.txt"))
+
+        # CASO 1: STEREO (Identificado pela presença de par _A e _B)
+        if arquivos_A and arquivos_B:
+            print(f"[INFO] Pasta STEREO detectada: {caminho_calib.name}")
+            params = arquivos_A[0].read_text().strip()
+            flags_calib_extractor = (
+                f" --ImageReader.single_camera 0"
+                f" --ImageReader.camera_model OPENCV"
+                f" --ImageReader.camera_params {params}"
+            )
+
+        # CASO 2: MONO (Identificado por qualquer TXT na pasta que não seja stereo/relação)
+        else:
+            todos_txt = [f for f in caminho_calib.glob("*.txt") if "_RELACAO" not in f.name]
+            if todos_txt:
+                print(f"[INFO] Pasta MONO detectada: {caminho_calib.name}")
+                params = todos_txt[0].read_text().strip()
+                flags_calib_extractor = (
+                    f" --ImageReader.single_camera 1"
+                    f" --ImageReader.camera_model OPENCV"
+                    f" --ImageReader.camera_params {params}"
+                )
+            else:
+                print("[AVISO] Nenhuma calibração TXT válida encontrada na pasta. Usando automático.")
+
+        # Em ambos os casos manuais, travamos o refinamento para respeitar o OpenCV
         flags_calib_mapper = " --Mapper.ba_refine_focal_length 0 --Mapper.ba_refine_extra_params 0"
 
+    # --- DEFINIÇÃO DAS ETAPAS DO PIPELINE ---
     etapas = [
+        # Etapa 1: Feature Extractor (Injeta parâmetros da lente)
         (f"colmap feature_extractor --database_path {db_path} --image_path {dir_img} --SiftExtraction.use_gpu {CONFIG['use_gpu']}{flags_calib_extractor}",
          "Extração de Features"),
+
+        # Etapa 2: Matcher (Encontra pontos comuns entre fotos)
         (f"colmap exhaustive_matcher --database_path {db_path} --SiftMatching.use_gpu {CONFIG['use_gpu']}",
          "Matcher Exaustivo"),
+
+        # Etapa 3: Mapper (Triangulação 3D inicial - Injeta trava de refinamento)
         (f"colmap mapper --database_path {db_path} --image_path {dir_img} --output_path \"{pasta_esparsa.resolve()}\"{flags_calib_mapper}",
          "Reconstrução Esparsa"),
+
+        # Etapa 4: Undistorter (Remove distorção das fotos para o processo denso)
         (f"colmap image_undistorter --image_path {dir_img} --input_path \"{pasta_esparsa.resolve() / '0'}\" --output_path \"{pasta_densa.resolve()}\" --output_type COLMAP",
          "Retificação de Imagens"),
-        (f"colmap patch_match_stereo --workspace_path \"{pasta_densa.resolve()}\"", "Estéreo Patch Match"),
+
+        # Etapa 5: Patch Match (Calcula profundidade pixel a pixel)
+        (f"colmap patch_match_stereo --workspace_path \"{pasta_densa.resolve()}\"",
+         "Estéreo Patch Match"),
+
+        # Etapa 6: Fusion (Cria a nuvem de pontos densa final)
         (f"colmap stereo_fusion --workspace_path \"{pasta_densa.resolve()}\" --output_path \"{pasta_densa.resolve() / 'modelo_fusionado.ply'}\"",
          "Fusão (Point Cloud)"),
+
+        # Etapa 7: Mesher (Gera a superfície/malha 3D)
         (f"colmap stereo_mesher --input_path \"{pasta_densa.resolve() / 'modelo_fusionado.ply'}\" --output_path \"{pasta_densa.resolve() / 'malha_final.ply'}\"",
          "Geração de Malha (Mesh)")
     ]
@@ -88,15 +127,15 @@ def executar_pipeline_reconstrucao_3d(pasta_frames: Path, pasta_projeto_saida: P
     print(f"[LOG] Acompanhe os detalhes técnicos em: {arquivo_log.name}\n")
 
     try:
-        # TQDM cuidando da barra de etapas
         with tqdm(total=len(etapas), desc="Progresso COLMAP", unit="etapa", ncols=80) as barra:
             for indice, (comando, descricao) in enumerate(etapas, 1):
                 barra.set_postfix_str(descricao)
 
                 executar_comando(comando)
 
+                # Verificação crítica após o Mapper
                 if indice == 3 and not (pasta_esparsa / "0").exists():
-                    raise Exception("Modelo esparso não gerado. Verifique as fotos.")
+                    raise Exception("Modelo esparso não gerado. Verifique a qualidade das fotos ou a calibração.")
 
                 barra.update(1)
 

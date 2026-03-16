@@ -163,8 +163,7 @@ def processar_reconstrucao(cfg: Dict[str, Any]) -> bool:
 
     # 2. NOVO: Seleciona o arquivo de calibração .txt
     pasta_base_calib = Path(cfg["paths"]["calibration_output_folder"])
-    caminho_calib = pedir_arquivo("Selecione a calibração (.txt)", pasta_base_calib,
-                                  [("Arquivo de Calibração", "*.txt")])
+    caminho_calib = pedir_diretorio("Selecione a PASTA de calibração (Mono ou Stereo)", pasta_base_calib)
     if not caminho_calib:
         print("[AVISO] Nenhuma calibração selecionada. O COLMAP tentará calibração automática.")
         # Você pode decidir se retorna False ou continua sem calibração manual

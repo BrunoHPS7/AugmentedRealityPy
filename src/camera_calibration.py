@@ -68,8 +68,8 @@ def executar_calibracao_mono(
 
     if sucesso:
         # 3. Lógica de Pasta Específica (Organização por modo)
-        pasta_mono = diretorio_saida / "mono"
-        pasta_mono.mkdir(parents=True, exist_ok=True)
+        pasta_projeto_mono = diretorio_saida / "mono" / nome_arquivo
+        pasta_projeto_mono.mkdir(parents=True, exist_ok=True)
 
         # 4. Extração dos parâmetros no formato COLMAP: fx, fy, cx, cy, k1, k2, p1, p2
         fx, fy = mtx[0, 0], mtx[1, 1]
@@ -80,7 +80,7 @@ def executar_calibracao_mono(
         txt_content = f"{fx:.12f},{fy:.12f},{cx:.12f},{cy:.12f},{k1:.12f},{k2:.12f},{p1:.12f},{p2:.12f}"
 
         # 5. Escrita do arquivo final
-        caminho_txt = (pasta_mono / nome_arquivo).with_suffix('.txt')
+        caminho_txt = (pasta_projeto_mono / nome_arquivo).with_suffix('.txt')
         caminho_txt.write_text(txt_content)
 
         print(f"\n[SUCESSO] Calibração MONO salva em: {caminho_txt}")
