@@ -4,29 +4,20 @@ from pathlib import Path
 from tqdm import tqdm
 
 
-def executar_fluxo_calibracao_camera(
-        diretorio_fotos: Path,
-        diretorio_saida: Path,
-        dimensoes_tabuleiro: tuple,
-        tamanho_quadrado_mm: float,
-        nome_arquivo_saida: str
-) -> bool:
-    """Calcula a matriz intrínseca e os coeficientes de distorção a partir de fotos."""
-
+def _extrair_pontos_tabuleiro(diretorio_fotos: Path, dimensoes: tuple, tamanho_quadrado_mm: float):
+    """Lógica centralizada para encontrar quinas em uma pasta de imagens."""
     criterio_refinamento = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
-    # 1. Preparação dos pontos reais (3D) no espaço físico
-    pontos_objeto_3d = np.zeros((dimensoes_tabuleiro[0] * dimensoes_tabuleiro[1], 3), np.float32)
-    pontos_objeto_3d[:, :2] = np.mgrid[0:dimensoes_tabuleiro[0], 0:dimensoes_tabuleiro[1]].T.reshape(-1, 2)
+    pontos_objeto_3d = np.zeros((dimensoes[0] * dimensoes[1], 3), np.float32)
+    pontos_objeto_3d[:, :2] = np.mgrid[0:dimensoes[0], 0:dimensoes[1]].T.reshape(-1, 2)
     pontos_objeto_3d *= tamanho_quadrado_mm
 
-    lista_pontos_3d = []  # Pontos no mundo real
-    lista_pontos_2d = []  # Pontos projetados na foto
+    lista_pontos_3d = []
+    lista_pontos_2d = []
+    imagem_cinza_ref = None
 
-    # 2. Busca pelas imagens usando pathlib
     extensoes = ["*.jpg", "*.jpeg", "*.png", "*.bmp", "*.tiff"]
     caminhos_fotos = []
-
     for ext in extensoes:
         caminhos_fotos.extend(diretorio_fotos.glob(ext))
         caminhos_fotos.extend(diretorio_fotos.glob(ext.upper()))
@@ -34,60 +25,130 @@ def executar_fluxo_calibracao_camera(
     caminhos_fotos = sorted(list(set(caminhos_fotos)))
 
     if not caminhos_fotos:
-        print(f"\n[ERRO] Nenhuma imagem válida encontrada na pasta: {diretorio_fotos}")
-        return False
+        return None, None, None
 
-    print(f"\n[CALIBRAÇÃO] Iniciando análise de {len(caminhos_fotos)} imagens...")
-
-    imagem_cinza_ref = None
-    sucessos = 0
-
-    # 3. Processamento das imagens com barra de progresso
-    for caminho in tqdm(caminhos_fotos, desc="Extraindo Quinas", unit="foto", ncols=80):
+    # Usando tqdm aqui para manter o feedback visual que você gosta
+    for caminho in tqdm(caminhos_fotos, desc=f"Processando {diretorio_fotos.name}", unit="foto", leave=False):
         frame = cv2.imread(str(caminho))
-        if frame is None:
-            continue
+        if frame is None: continue
 
-        imagem_cinza = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        if imagem_cinza_ref is None:
-            imagem_cinza_ref = imagem_cinza
+        cinza = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        if imagem_cinza_ref is None: imagem_cinza_ref = cinza
 
-        achou, quinas = cv2.findChessboardCorners(imagem_cinza, dimensoes_tabuleiro, None)
-
+        achou, quinas = cv2.findChessboardCorners(cinza, dimensoes, None)
         if achou:
             lista_pontos_3d.append(pontos_objeto_3d)
-            quinas_refinadas = cv2.cornerSubPix(imagem_cinza, quinas, (11, 11), (-1, -1), criterio_refinamento)
-            lista_pontos_2d.append(quinas_refinadas)
-            sucessos += 1
+            refinadas = cv2.cornerSubPix(cinza, quinas, (11, 11), (-1, -1), criterio_refinamento)
+            lista_pontos_2d.append(refinadas)
 
-    if not lista_pontos_3d:
-        print("\n[ERRO] O padrão de xadrez não foi detectado com sucesso em NENHUMA foto.")
+    return lista_pontos_3d, lista_pontos_2d, imagem_cinza_ref
+
+
+def executar_calibracao_mono(
+        diretorio_fotos: Path,
+        diretorio_saida: Path,
+        dimensoes: tuple,
+        tamanho_quadrado_mm: float,
+        nome_arquivo: str
+) -> bool:
+    """Calibração Mono: Gera parâmetros intrínsecos e salva em diretorio_saida/mono/"""
+
+    # 1. Extração de pontos (Reuso da função interna centralizada)
+    pts_3d, pts_2d, img_ref = _extrair_pontos_tabuleiro(diretorio_fotos, dimensoes, tamanho_quadrado_mm)
+
+    if not pts_3d:
+        print(f"\n[ERRO] Falha na detecção de quinas em: {diretorio_fotos}")
         return False
 
-    # 4. Cálculo Matemático da Câmera
-    print(f"\n[MATEMÁTICA] Calculando parâmetros com {sucessos} amostras válidas...")
-    sucesso_calib, matriz_camera, distorcao, _, _ = cv2.calibrateCamera(
-        lista_pontos_3d, lista_pontos_2d, imagem_cinza_ref.shape[::-1], None, None
+    # 2. Cálculo Matemático da Câmera (Matriz Intrínseca e Distorção)
+    print(f"[MATEMÁTICA] Calculando parâmetros para: {nome_arquivo}...")
+    sucesso, mtx, dist, _, _ = cv2.calibrateCamera(
+        pts_3d, pts_2d, img_ref.shape[::-1], None, None
     )
 
-    if sucesso_calib:
-        diretorio_saida.mkdir(parents=True, exist_ok=True)
+    if sucesso:
+        # 3. Lógica de Pasta Específica (Organização por modo)
+        pasta_mono = diretorio_saida / "mono"
+        pasta_mono.mkdir(parents=True, exist_ok=True)
 
-        # 1. Extrair os parâmetros na ordem: fx, fy, cx, cy, k1, k2, p1, p2
-        fx = matriz_camera[0, 0]
-        fy = matriz_camera[1, 1]
-        cx = matriz_camera[0, 2]
-        cy = matriz_camera[1, 2]
-        k1, k2, p1, p2 = distorcao.ravel()[:4]
+        # 4. Extração dos parâmetros no formato COLMAP: fx, fy, cx, cy, k1, k2, p1, p2
+        fx, fy = mtx[0, 0], mtx[1, 1]
+        cx, cy = mtx[0, 2], mtx[1, 2]
+        k1, k2, p1, p2 = dist.ravel()[:4]
 
-        # 2. Formatar a string (usando 12 casas decimais para garantir precisão)
-        params_colmap = f"{fx:.12f},{fy:.12f},{cx:.12f},{cy:.12f},{k1:.12f},{k2:.12f},{p1:.12f},{p2:.12f}"
+        # Formatação com 12 casas decimais para precisão científica
+        txt_content = f"{fx:.12f},{fy:.12f},{cx:.12f},{cy:.12f},{k1:.12f},{k2:.12f},{p1:.12f},{p2:.12f}"
 
-        # 3. Escrita do arquivo
-        caminho_final = (diretorio_saida / nome_arquivo_saida).with_suffix('.txt')
-        caminho_final.write_text(params_colmap)
+        # 5. Escrita do arquivo final
+        caminho_txt = (pasta_mono / nome_arquivo).with_suffix('.txt')
+        caminho_txt.write_text(txt_content)
 
-        print(f"\n[SUCESSO] Parâmetros salvos para COLMAP: {caminho_final.name}")
-        print(f"Valores: {params_colmap}")
-
+        print(f"\n[SUCESSO] Calibração MONO salva em: {caminho_txt}")
+        print(f"Valores: {txt_content}")
         return True
+
+    return False
+
+
+def executar_calibracao_stereo(
+        pasta_A: Path,
+        pasta_B: Path,
+        diretorio_saida: Path,
+        dimensoes: tuple,
+        tamanho_quadrado_mm: float,
+        nome_arquivo: str
+) -> bool:
+    """Calibração Stereo: Salva em diretorio_saida/stereo/nome_projeto/"""
+
+    print(f"\n[STEREO] Analisando par de câmeras para: {nome_arquivo}")
+
+    # 1. Extração de pontos (Reuso da função interna)
+    obj_A, img_A, res_A = _extrair_pontos_tabuleiro(pasta_A, dimensoes, tamanho_quadrado_mm)
+    obj_B, img_B, res_B = _extrair_pontos_tabuleiro(pasta_B, dimensoes, tamanho_quadrado_mm)
+
+    if not img_A or not img_B or len(img_A) != len(img_B):
+        print("\n[ERRO] Inconsistência nos pares de imagens.")
+        return False
+
+    # 2. Intrínsecos iniciais
+    _, mtxA, distA, _, _ = cv2.calibrateCamera(obj_A, img_A, res_A.shape[::-1], None, None)
+    _, mtxB, distB, _, _ = cv2.calibrateCamera(obj_B, img_B, res_B.shape[::-1], None, None)
+
+    # 3. Calibração Stereo (Relação R e T)
+    flags = cv2.CALIB_FIX_INTRINSIC
+    criterio = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 1e-5)
+
+    ret, _, _, _, _, R, T, _, _ = cv2.stereoCalibrate(
+        obj_A, img_A, img_B, mtxA, distA, mtxB, distB, res_A.shape[::-1],
+        criteria=criterio, flags=flags
+    )
+
+    if ret:
+        # --- NOVA LÓGICA DE ORGANIZAÇÃO ---
+        # Cria: caminhos/calibracao/stereo/nome_do_usuario/
+        pasta_projeto_stereo = diretorio_saida / "stereo" / nome_arquivo
+        pasta_projeto_stereo.mkdir(parents=True, exist_ok=True)
+
+        def formatar_colmap(m, d):
+            return f"{m[0, 0]:.12f},{m[1, 1]:.12f},{m[0, 2]:.12f},{m[1, 2]:.12f},{d.ravel()[0]:.12f},{d.ravel()[1]:.12f},{d.ravel()[2]:.12f},{d.ravel()[3]:.12f}"
+
+        # Salva Camera A
+        (pasta_projeto_stereo / f"{nome_arquivo}_A.txt").write_text(formatar_colmap(mtxA, distA))
+
+        # Salva Camera B
+        (pasta_projeto_stereo / f"{nome_arquivo}_B.txt").write_text(formatar_colmap(mtxB, distB))
+
+        # Salva a relação (R e T)
+        baseline = np.linalg.norm(T)
+        extrinsecos_content = (
+            f"BASELINE_MM: {baseline:.12f}\n"
+            f"T_VEC: {T.ravel().tolist()}\n"
+            f"R_MAT:\n{np.array2string(R, precision=12, separator=',')}"
+        )
+        (pasta_projeto_stereo / f"{nome_arquivo}_RELACAO.txt").write_text(extrinsecos_content)
+
+        print(f"\n[SUCESSO] Arquivos Stereo empacotados em: {pasta_projeto_stereo}")
+        print(f"Baseline calculada: {baseline:.4f} mm")
+        return True
+
+    return False

@@ -9,7 +9,7 @@ from tkinter import filedialog
 from typing import Dict, Any, Optional
 
 # Módulos internos ordenados por fluxo lógico
-from src.camera_calibration import executar_fluxo_calibracao_camera
+from src.camera_calibration import executar_calibracao_mono, executar_calibracao_stereo
 from src.acquisition import extrair_e_salvar_frames_por_segundo
 from src.reconstruction import executar_pipeline_reconstrucao_3d
 from src.visualization import renderizar_visualizacao_3d
@@ -93,24 +93,39 @@ def processar_calibracao(cfg: Dict[str, Any]) -> bool:
     """1. Calibração: Gera os parâmetros intrínsecos da câmera."""
     print("\n--- MODO: CALIBRAÇÃO DE CÂMERA ---")
 
+    # Escolha do tipo de calibração
+    print("[1] Mono (Câmera Única)")
+    print("[2] Stereo (Par de Câmeras)")
+    tipo = input("\nEscolha o tipo de calibração: ").strip()
+
+    if tipo not in ["1", "2"]:
+        print("[ERRO] Opção inválida.")
+        return False
+
     pasta_base_fotos = Path(cfg["paths"]["calibration_images"])
-    pasta_fotos = pedir_diretorio("Selecione a pasta com as fotos do tabuleiro", pasta_base_fotos)
-    if not pasta_fotos: return False
+    pasta_saida = Path(cfg["paths"]["calibration_output_folder"])
 
     nome_arquivo = input("Digite um nome para o arquivo de saída (ex: camera_pro): ").strip()
     if not nome_arquivo: return False
 
-    pasta_saida = Path(cfg["paths"]["calibration_output_folder"])
-    caminho_final = pasta_saida / (nome_arquivo if nome_arquivo.endswith('.npz') else f"{nome_arquivo}.npz")
-
-    if caminho_final.exists():
-        if input(f"Arquivo '{caminho_final.name}' já existe. Sobrescrever? (s/n): ").lower() != 's':
-            return False
-
     dimensoes = tuple(cfg["parameters"]["calibration"]["checkerboard_size"])
     tamanho_quadrado = float(cfg["parameters"]["calibration"]["square_size"])
 
-    return executar_fluxo_calibracao_camera(pasta_fotos, pasta_saida, dimensoes, tamanho_quadrado, nome_arquivo)
+    if tipo == "1":
+        pasta_fotos = pedir_diretorio("Selecione a pasta com as fotos do tabuleiro", pasta_base_fotos)
+        if not pasta_fotos: return False
+        return executar_calibracao_mono(pasta_fotos, pasta_saida, dimensoes, tamanho_quadrado, nome_arquivo)
+
+    else:  # Stereo
+        print("\n[STEREO] Selecione a pasta da Câmera A (Esquerda/Referência)")
+        pasta_A = pedir_diretorio("Selecionar Câmera A", pasta_base_fotos)
+        if not pasta_A: return False
+
+        print("\n[STEREO] Selecione a pasta da Câmera B (Direita)")
+        pasta_B = pedir_diretorio("Selecionar Câmera B", pasta_base_fotos)
+        if not pasta_B: return False
+
+        return executar_calibracao_stereo(pasta_A, pasta_B, pasta_saida, dimensoes, tamanho_quadrado, nome_arquivo)
 
 
 def processar_extracao(cfg: Dict[str, Any]) -> bool:
