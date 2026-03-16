@@ -1,7 +1,7 @@
  # Pipeline de Execução (Ordem Lógica):
 # "CameraCalibration" -> "OpenCV" -> "Reconstruction" -> "Visualization"
 # Modos Adicionais: "Full", "History"
-execution_mode: "Visualization"
+execution_mode: "Reconstruction"
 
 paths:
   # 1. Calibração (Ajustado para o plural 'calibrations' como no seu print)
@@ -20,6 +20,5 @@ paths:
 parameters:
   calibration:
     checkerboard_size: [9, 6]
-    square_size: 25.0
   acquisition:
     desired_fps: 5

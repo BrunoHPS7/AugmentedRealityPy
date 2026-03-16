@@ -105,11 +105,19 @@ def processar_calibracao(cfg: Dict[str, Any]) -> bool:
     pasta_base_fotos = Path(cfg["paths"]["calibration_images"])
     pasta_saida = Path(cfg["paths"]["calibration_output_folder"])
 
-    nome_arquivo = input("Digite um nome para o arquivo de saída (ex: camera_pro): ").strip()
+    # --- ENTRADAS MANUAIS OBRIGATÓRIAS ---
+    nome_arquivo = input("Digite um nome para o projeto de calibração: ").strip()
     if not nome_arquivo: return False
 
+    # Solicita a medição real do usuário
+    try:
+        tamanho_quadrado = float(input("Meça o lado de um quadrado do tabuleiro (em mm): ").replace(",", "."))
+    except ValueError:
+        print("[ERRO] Valor inválido para o tamanho do quadrado.")
+        return False
+
+    # Dimensões ainda podem vir do YAML (pois o tabuleiro físico costuma ser o mesmo)
     dimensoes = tuple(cfg["parameters"]["calibration"]["checkerboard_size"])
-    tamanho_quadrado = float(cfg["parameters"]["calibration"]["square_size"])
 
     if tipo == "1":
         pasta_fotos = pedir_diretorio("Selecione a pasta com as fotos do tabuleiro", pasta_base_fotos)
