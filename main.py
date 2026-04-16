@@ -3,9 +3,7 @@ import sys
 import yaml
 import platform
 import subprocess
-import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog
 from typing import Dict, Any, Optional
 
 # Módulos internos para execução do pipeline de Visão Computacional
@@ -13,6 +11,18 @@ from src.camera_calibration import executar_calibracao_mono, executar_calibracao
 from src.acquisition import extrair_e_salvar_frames_por_segundo
 from src.reconstruction import executar_pipeline_reconstrucao_3d
 from src.visualization import renderizar_visualizacao_3d
+
+# Tratamento do Tkinter para o CLI:
+try:
+    import tkinter as tk
+    from tkinter import filedialog
+    TKINTER_AVAILABLE = True
+except ImportError:
+    TKINTER_AVAILABLE = False
+    # Mock para evitar NameError no código
+    tk = Any
+    filedialog = Any
+    print("[SISTEMA] Tkinter não detectado. Modo gráfico desativado automaticamente.")
 
 
 # --- UTILITÁRIOS DE INTERFACE E SISTEMA ---
