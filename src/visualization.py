@@ -1,5 +1,13 @@
-import pyvista as pv
+from typing import Any # Importante para o mock
 from pathlib import Path
+
+try:
+    import pyvista as pv
+    PYVISTA_AVAILABLE = True
+except Exception:
+    PYVISTA_AVAILABLE = False
+    pv = None # Ou Any, apenas para o interpretador não dar NameError
+    # Não precisa de print aqui para não sujar o CLI do SSH toda vez que importar
 
 
 def renderizar_visualizacao_3d(caminho_modelo: Path):
