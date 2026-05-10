@@ -57,33 +57,33 @@ def executar_pipeline_reconstrucao_3d(pasta_frames: Path, pasta_projeto_saida: P
 
     # --- DEFINIÇÃO DAS ETAPAS DO PIPELINE ---
     etapas = [
-        # Etapa 1: Feature Extractor (Injeta parâmetros da lente)
+        # Etapa 1: Feature Extractor
         (f"colmap feature_extractor --database_path {db_path} --image_path {dir_img} --SiftExtraction.use_gpu {CONFIG['use_gpu']}",
          "Extração de Features"),
 
-        # Etapa 2: Matcher (Encontra pontos comuns entre fotos)
+        # Etapa 2: Matcher
         (f"colmap exhaustive_matcher --database_path {db_path} --SiftMatching.use_gpu {CONFIG['use_gpu']}",
          "Matcher Exaustivo"),
 
-        # Etapa 3: Mapper (Triangulação 3D inicial - Injeta trava de refinamento)
+        # Etapa 3: Mapper
         (f"colmap mapper --database_path {db_path} --image_path {dir_img} --output_path \"{pasta_esparsa.resolve()}\"",
          "Reconstrução Esparsa"),
 
-        # Etapa 4: Undistorter (Remove distorção das fotos para o processo denso)
+        # Etapa 4: Undistorter
         (f"colmap image_undistorter --image_path {dir_img} --input_path \"{pasta_esparsa.resolve() / '0'}\" --output_path \"{pasta_densa.resolve()}\" --output_type COLMAP",
          "Retificação de Imagens"),
 
-        # Etapa 5: Patch Match (Calcula profundidade pixel a pixel)
+        # Etapa 5: Patch Match
         (f"colmap patch_match_stereo --workspace_path \"{pasta_densa.resolve()}\"",
          "Estéreo Patch Match"),
 
-        # Etapa 6: Fusion (Cria a nuvem de pontos densa final)
+        # Etapa 6: Fusion
         (f"colmap stereo_fusion --workspace_path \"{pasta_densa.resolve()}\" --output_path \"{pasta_densa.resolve() / 'modelo_fusionado.ply'}\"",
          "Fusão (Point Cloud)"),
 
-        # Etapa 7: Mesher (Gera a superfície/malha 3D)
-        (f"colmap stereo_mesher --input_path \"{pasta_densa.resolve() / 'modelo_fusionado.ply'}\" --output_path \"{pasta_densa.resolve() / 'malha_final.ply'}\"",
-         "Geração de Malha (Mesh)")
+        # Etapa 7: Poisson Mesher (Substituído o stereo_mesher por ser mais estável)
+        (f"colmap poisson_mesher --input_path \"{pasta_densa.resolve() / 'modelo_fusionado.ply'}\" --output_path \"{pasta_densa.resolve() / 'malha_final.ply'}\"",
+         "Geração de Malha (Poisson)")
     ]
 
     print(f"\n[RECONSTRUÇÃO] Iniciando pipeline para o projeto: {pasta_projeto_saida.name}")
