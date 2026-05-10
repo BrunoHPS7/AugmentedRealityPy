@@ -1,6 +1,6 @@
  # Pipeline de Execução (Ordem Lógica):
 # "CameraCalibration" -> "OpenCV" -> "Reconstruction" -> "Visualization"
-execution_mode: "CameraCalibration"
+execution_mode: "Reconstruction"
 remote_mode: True
 
 paths:
@@ -17,19 +17,15 @@ paths:
   colmap_output: "data/out/reconstructions"
   resources: "resources"
 
-  # 4. Remote (Mudar para Drive)
-  calibration_images_remote: "data/in/images_calibrations/teste"    #Path da mono
-  calibration_images_remote_a: "data/in/images_calibrations/teste"  #Path A da Stereo
-  calibration_images_remote_b: "data/in/images_calibrations/teste"  #Path B da Streo
-  calibration_output_folder_remote: "data/out/calibrations"
+  # 4.
   video_input_remote: "/home/bhzinn/Vídeos/Hidamari/goku.mp4"
   frames_output_remote: "data/out/frames"
-  colmap_input_remote: "data/out/frames/gokuzao"
+  colmap_input_remote: "data/out/frames/images"
   colmap_output_remote: "data/out/reconstructions"
   resources_remote: "resources"
 
 parameters:
   calibration:
-    checkerboard_size: [9, 6]
+    checkerboard_size: [8, 6]
   acquisition:
     desired_fps: 5
