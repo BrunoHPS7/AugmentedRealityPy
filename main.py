@@ -190,16 +190,6 @@ def processar_reconstrucao(cfg: Dict[str, Any]) -> bool:
         print("[ERRO] Pasta de frames inválida ou não selecionada.")
         return False
 
-    # Camimhos Calibrações (Falta aprimorar para o uso de mono/stereo)
-    if is_remote:
-        caminho_calib = Path(cfg["paths"]["calibration_output_folder_remote"])
-    else:
-        pasta_base_calib = Path(cfg["paths"]["calibration_output_folder"])
-        caminho_calib = pedir_diretorio("Selecione a PASTA de calibração (Mono ou Stereo)", pasta_base_calib)
-    if not caminho_calib or not caminho_calib.exists():
-        print("[ERRO] A calibração é necessária para a reconstrução métrica. Verifique o caminho.")
-        return False
-
     nome_reconstrucao = input("Nome para esta reconstrução (ex: modelo_final): ").strip()
     if not nome_reconstrucao: return False
 
@@ -208,7 +198,7 @@ def processar_reconstrucao(cfg: Dict[str, Any]) -> bool:
         print("[ERRO] Nome já existente no diretório de saída.")
         return False
 
-    return executar_pipeline_reconstrucao_3d(pasta_frames, pasta_saida, caminho_calib)
+    return executar_pipeline_reconstrucao_3d(pasta_frames, pasta_saida)
 
 
 def processar_visualizacao(cfg: Dict[str, Any]) -> bool:
