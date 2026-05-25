@@ -1,12 +1,17 @@
- # Pipeline de Execução (Ordem Lógica):
-# "CameraCalibration" -> "OpenCV" -> "Reconstruction" -> "Visualization"
-execution_mode: "Reconstruction"
-remote_mode: True
+# Pipeline de Execução (Ordem Lógica):
+# "CameraCalibration" -> "OpenCV" -> "Normalize" -> "Reconstruction" -> "Visualization"
+execution_mode: "Normalize"
+remote_mode: False
 
 paths:
-  # 1. Calibração (Ajustado para o plural 'calibrations' como no seu print)
+  # 1. Calibração
   calibration_images: "data/in/images_calibrations"
   calibration_output_folder: "data/out/calibrations"
+  parameters:
+    calibration:
+      checkerboard_size: [ 8, 6 ]
+    acquisition:
+      desired_fps: 5
 
   # 2. Extração de Frames
   video_input: "data/in/videos"
@@ -17,15 +22,13 @@ paths:
   colmap_output: "data/out/reconstructions"
   resources: "resources"
 
-  # 4.
+  # 4. Remoto
   video_input_remote: "/home/bhzinn/Vídeos/Hidamari/goku.mp4"
   frames_output_remote: "data/out/frames"
   colmap_input_remote: "data/out/frames/images"
   colmap_output_remote: "data/out/reconstructions"
   resources_remote: "resources"
 
-parameters:
-  calibration:
-    checkerboard_size: [8, 6]
-  acquisition:
-    desired_fps: 5
+  # 5.  Normalização
+  frames_input_normalização: "data/out/frames"
+  frames_output_normalização: "data/out/normalizados"

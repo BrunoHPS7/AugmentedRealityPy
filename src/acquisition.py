@@ -1,3 +1,4 @@
+import os
 import cv2
 from pathlib import Path
 from tqdm import tqdm
@@ -45,4 +46,51 @@ def extrair_e_salvar_frames_por_segundo(caminho_video: Path, diretorio_saida: Pa
 
     captura_video.release()
     print(f"[SUCESSO] Extração concluída! {contador_salvos - 1} imagens salvas em: {diretorio_saida}")
+    return True
+
+
+def normalize_images_clahe(input_path: Path, output_path: Path, clip_limit=2.0, tile_size=(8, 8)) -> bool:
+    """
+    Aplica a normalização CLAHE em todas as imagens de um diretório.
+    """
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+
+    # Garante que a pasta de saída exista
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    # Inicializa o objeto CLAHE
+    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_size)
+    valid_extensions = ('.jpg', '.jpeg', '.png', '.bmp', '.tiff')
+
+    print(f"[PROCESSAMENTO] Aplicando CLAHE...")
+
+    files = [f for f in os.listdir(input_path) if f.lower().endswith(valid_extensions)]
+
+    if not files:
+        print("[AVISO] Nenhuma imagem encontrada para normalizar.")
+        return False
+
+    for filename in tqdm(files, desc="Normalizando", unit="img", ncols=80):
+        img_full_path = input_path / filename
+        img = cv2.imread(str(img_full_path))
+
+        if img is None:
+            continue
+
+        # 1. Converte para LAB
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+
+        # 2. Aplica o CLAHE no canal L (Luminosidade)
+        l_norm = clahe.apply(l)
+
+        # 3. Mescla e converte de volta
+        combined = cv2.merge((l_norm, a, b))
+        final_img = cv2.cvtColor(combined, cv2.COLOR_LAB2BGR)
+
+        # 4. Salva o arquivo no destino
+        cv2.imwrite(str(output_path / filename), final_img)
+
+    print(f"[SUCESSO] {len(files)} imagens normalizadas em: {output_path}")
     return True

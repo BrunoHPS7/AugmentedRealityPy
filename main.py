@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional
 # Módulos internos para execução do pipeline de Visão Computacional
 from src.camera_calibration import executar_calibracao_mono, executar_calibracao_stereo
 from src.acquisition import extrair_e_salvar_frames_por_segundo
+from src.acquisition import normalize_images_clahe
 from src.reconstruction import executar_pipeline_reconstrucao_3d
 from src.visualization import renderizar_visualizacao_3d
 
@@ -83,8 +84,6 @@ def abrir_pasta_os(caminho: Path):
     except Exception as e:
         print(f"[ERRO] Falha ao acessar diretório: {e}")
 
-
-# --- PROCESSADORES DE ETAPAS (PIPELINE) ---
 
 def processar_calibracao(cfg: Dict[str, Any]) -> bool:
     """ETAPA 1: Determinação dos parâmetros intrínsecos e métricos da câmera."""
@@ -213,6 +212,34 @@ def processar_visualizacao(cfg: Dict[str, Any]) -> bool:
     return True
 
 
+def processar_normalizacao(cfg: Dict[str, Any]) -> bool:
+    """ETAPA 5: Normalização de contraste via CLAHE."""
+    print("\n--- MODO: NORMALIZAÇÃO DE IMAGENS (CLAHE) ---")
+
+    # 1. Define onde estão as pastas de frames e onde ficarão as normalizadas
+    pasta_base_frames = Path(cfg["paths"]["frames_input_normalização"])
+    pasta_base_saida = Path(cfg["paths"]["frames_output_normalização"])
+
+    # 2. Pergunta ao usuário qual projeto ele quer normalizar
+    print(f"[INFO] Procurando projetos em: {pasta_base_frames}")
+
+    # Se quiser usar a interface gráfica que você já tem:
+    pasta_projeto = pedir_diretorio("Selecione a pasta do projeto para normalizar", pasta_base_frames)
+
+    if not pasta_projeto:
+        return False
+
+    # 3. Define o nome de saída como "nome_do_projeto_normalizado"
+    nome_projeto = pasta_projeto.name
+    pasta_saida = pasta_base_saida / f"{nome_projeto}_normalizado"
+
+    print(f"\n[PROCESSO] Origem: {pasta_projeto}")
+    print(f"[PROCESSO] Destino: {pasta_saida}")
+
+    # 4. Chama a função técnica de processamento
+    return normalize_images_clahe(pasta_projeto, pasta_saida)
+
+
 if __name__ == "__main__":
     try:
         config = carregar_yaml()
@@ -223,23 +250,27 @@ if __name__ == "__main__":
         print(f" SO: {platform.system()} | Modo Ativo: {modo}")
         print("=" * 45)
 
+        # Mapeamento atualizado incluindo o novo modo
         mapeamento_modos = {
             "CameraCalibration": processar_calibracao,
-            "OpenCV": processar_extracao,
-            "Reconstruction": processar_reconstrucao,
-            "Visualization": processar_visualizacao,
+            "OpenCV":            processar_extracao,
+            "Normalize":         processar_normalizacao,
+            "Reconstruction":    processar_reconstrucao,
+            "Visualization":     processar_visualizacao,
         }
 
         if modo in mapeamento_modos:
             if mapeamento_modos[modo](config):
                 print("\n[SUCESSO] Operação concluída.")
+            else:
+                print("\n[FALHA] A operação retornou um erro.")
         elif modo == "History":
             abrir_pasta_os(Path(config["paths"]["colmap_output"]))
         else:
             print(f"\n[AVISO] Modo '{modo}' não reconhecido.")
 
     except KeyboardInterrupt:
-        print("\n\n[SISTEMA] Processo interrompido.")
+        print("\n\n[SISTEMA] Processo interrompido pelo usuário.")
         sys.exit(0)
     except Exception as e:
         print(f"\n[FALHA CRÍTICA] Erro: {e}")
