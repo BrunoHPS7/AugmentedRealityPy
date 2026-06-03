@@ -58,11 +58,11 @@ def executar_pipeline_reconstrucao_3d(pasta_frames: Path, pasta_projeto_saida: P
     # --- DEFINIÇÃO DAS ETAPAS DO PIPELINE ---
     etapas = [
         # Etapa 1: Feature Extractor
-        (f"colmap feature_extractor --database_path {db_path} --image_path {dir_img} --SiftExtraction.use_gpu {CONFIG['use_gpu']}",
+        (f"colmap feature_extractor --database_path {db_path} --image_path {dir_img}",
          "Extração de Features"),
 
         # Etapa 2: Matcher
-        (f"colmap exhaustive_matcher --database_path {db_path} --SiftMatching.use_gpu {CONFIG['use_gpu']}",
+        (f"colmap exhaustive_matcher --database_path {db_path}",
          "Matcher Exaustivo"),
 
         # Etapa 3: Mapper
@@ -73,7 +73,7 @@ def executar_pipeline_reconstrucao_3d(pasta_frames: Path, pasta_projeto_saida: P
         (f"colmap image_undistorter --image_path {dir_img} --input_path \"{pasta_esparsa.resolve() / '0'}\" --output_path \"{pasta_densa.resolve()}\" --output_type COLMAP",
          "Retificação de Imagens"),
 
-        # Etapa 5: Patch Match
+        # Etapa 5: Patch Match (Aqui a flag costuma ser estável, mas se der erro, remova o gpu_index)
         (f"colmap patch_match_stereo --workspace_path \"{pasta_densa.resolve()}\"",
          "Estéreo Patch Match"),
 
@@ -81,7 +81,7 @@ def executar_pipeline_reconstrucao_3d(pasta_frames: Path, pasta_projeto_saida: P
         (f"colmap stereo_fusion --workspace_path \"{pasta_densa.resolve()}\" --output_path \"{pasta_densa.resolve() / 'modelo_fusionado.ply'}\"",
          "Fusão (Point Cloud)"),
 
-        # Etapa 7: Poisson Mesher (Substituído o stereo_mesher por ser mais estável)
+        # Etapa 7: Poisson Mesher
         (f"colmap poisson_mesher --input_path \"{pasta_densa.resolve() / 'modelo_fusionado.ply'}\" --output_path \"{pasta_densa.resolve() / 'malha_final.ply'}\"",
          "Geração de Malha (Poisson)")
     ]
