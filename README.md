@@ -1,30 +1,61 @@
-### Sistema de Reconstrução 3D Introdução
+# Sistema de Reconstrução 3D
 
-Este sistema automatiza o fluxo de fotogrametria, permitindo transformar vídeos e sequências de fotos em modelos tridimensionais. Ele integra ferramentas de visão computacional (OpenCV) e algoritmos de reconstrução (COLMAP) em uma interface unificada via Python. O projeto foi estruturado para facilitar o processamento de dados desde a correção da lente até a visualização final do modelo.
+### Introdução
+Este sistema automatiza o fluxo de fotogrametria, permitindo transformar vídeos e sequências de fotos em modelos tridimensionais. Ele integra ferramentas de visão computacional e algoritmos de reconstrução em uma interface unificada via Python, facilitando o processo desde a captura até a visualização final.
 
 ### Módulos do Sistema
+O software é estruturado em etapas lógicas baseadas nos scripts contidos em `src/`:
 
-O software é dividido em quatro etapas lógicas que devem ser executadas em sequência:
+1. **Aquisição (`acquisition.py`):** Converte vídeos em sequências de frames para processamento.
+2. **Calibração (`camera_calibration.py`):** Calcula os parâmetros da câmera para corrigir distorções de lente.
+3. **Reconstrução (`reconstruction.py`):** Motor principal que utiliza o COLMAP para gerar a nuvem de pontos e a malha 3D.
+4. **Normalização:** Organiza e padroniza os dados para otimizar a triangulação.
+5. **Visualização (`visualization.py`):** Interface para inspeção dos modelos 3D gerados.
 
-    Calibração (CameraCalibration): Processa fotos de um padrão de xadrez para calcular a matriz intrínseca da câmera e corrigir distorções da lente.
+---
 
-    Extração de Frames (OpenCV): Converte vídeos de entrada em uma sequência de imagens estáticas (frames) com base na taxa de quadros (FPS) configurada.
+### Preparação do Ambiente (Conda)
 
-    Reconstrução 3D (Reconstruction): Utiliza o motor do COLMAP para realizar a triangulação de pontos, estimar a posição das câmeras e gerar a nuvem de pontos.
+O uso do Conda é a forma recomendada para garantir a aceleração por hardware (GPU/CUDA) e a compatibilidade das bibliotecas de sistema.
 
-    Visualização (Visualization): Interface para renderizar e inspecionar o modelo final nos formatos .ply ou .obj.
+#### 1. Criar e Ativar o Ambiente
+Abra o terminal na pasta raiz do projeto e execute:
+```bash
+# Cria o ambiente isolado com Python 3.12
+conda create -n condaVenv python=3.12 -y
 
-### Preparação do Ambiente (VENV)
+# ATIVA o ambiente (Obrigatório antes dos próximos passos)
+conda activate condaVenv
+```
 
-O projeto conta com um script de automação para configurar todo o ambiente de desenvolvimento, garantindo que todas as dependências estejam na versão correta.
+#### 2. Instalar o Motor de Reconstrução (COLMAP)
+Instale a versão estável compatível com o pipeline de automação:
+```bash
+conda install -c conda-forge colmap=3.12.6 -y
+```
 
-Para configurar o ambiente:
+#### 3. Instalar Dependências do Sistema (Pip)
+Com o ambiente `condaVenv` ativo, instale os pacotes Python necessários para a interface e processamento de imagem:
+```bash
+pip install -r requirements.txt
+```
 
-    Abra o terminal na pasta raiz do projeto.
+---
 
-    Execute o script de setup:
-    Bash
+### Como Executar
 
-    python setup_venv.py
+Toda a operação é centralizada no arquivo `main.py` e controlada pelo `config.yaml`.
 
-    O script irá criar a pasta .venv, ativar o ambiente virtual e instalar todas as bibliotecas do arquivo requirements.txt automaticamente.
+1. **Configuração:** Ajuste as pastas e parâmetros no `config.yaml` (ex: `remote_mode`, `desired_fps`).
+2. **Execução:**
+   ```bash
+   # Certifique-se de que o ambiente está ativo
+   conda activate condaVenv
+   
+   # Inicie o pipeline
+   python main.py
+   ```
+
+### Logs e Resultados
+- Os modelos gerados serão salvos em `data/out/reconstructions/`.
+- O histórico de processamento pode ser consultado nos arquivos `.log` dentro da pasta de cada teste.
