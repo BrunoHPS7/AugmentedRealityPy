@@ -2,7 +2,42 @@ import subprocess
 import logging
 from pathlib import Path
 from tqdm import tqdm
-from typing import Optional
+from typing import Dict, Any, Optional
+
+
+class ConstrutorColmap:
+    """Construtor dinâmico para chamadas CLI do COLMAP."""
+
+    def __init__(self, binario_base: str = "colmap"):
+        self.binario = binario_base
+
+    def montar(self, modulo: str, parametros: Dict[str, Any]) -> str:
+        """
+        Monta o comando shell final.
+        Valores booleanos (True/False) são convertidos para 1/0 (padrão COLMAP).
+        Objetos Path são resolvidos e envelopados em aspas duplas.
+        """
+        comando = [f"{self.binario} {modulo}"]
+
+        for chave, valor in parametros.items():
+            if valor is None:
+                continue
+
+            # Tratamento da formatação da flag (ex: camera_model -> --camera_model)
+            flag = f"--{chave}"
+
+            # Tratamento do valor
+            if isinstance(valor, bool):
+                str_valor = "1" if valor else "0"
+            elif isinstance(valor, Path):
+                # Resolve o caminho absoluto e protege contra espaços
+                str_valor = f'"{valor.resolve()}"'
+            else:
+                str_valor = str(valor)
+
+            comando.append(f"{flag} {str_valor}")
+
+        return " ".join(comando)
 
 
 def configurar_logging(caminho_projeto: Path) -> Path:
@@ -39,51 +74,66 @@ def executar_comando(comando_shell: str):
 def executar_pipeline_reconstrucao_3d(pasta_frames: Path, pasta_projeto_saida: Path) -> bool:
     """Pipeline COLMAP em 7 etapas com suporte automático para Mono e Stereo via pastas."""
 
+    # Configurações globais que podem ser mescladas nos dicionários de parâmetros depois
     CONFIG = {"threads": -1, "use_gpu": 1, "max_img_size": 4000}
 
     pasta_projeto_saida.mkdir(parents=True, exist_ok=True)
     arquivo_log = configurar_logging(pasta_projeto_saida)
 
-    # Conversão para string com aspas para evitar bugs com espaços no COLMAP
-    dir_img = f'"{pasta_frames.resolve()}"'
-    dir_out = f'"{pasta_projeto_saida.resolve()}"'
-
-    db_path = f'"{pasta_projeto_saida.resolve() / "database.db"}"'
+    # Definição de caminhos usando Path puro
+    db_path = pasta_projeto_saida / "database.db"
     pasta_esparsa = pasta_projeto_saida / "sparse"
     pasta_densa = pasta_projeto_saida / "dense"
 
     pasta_esparsa.mkdir(exist_ok=True)
     pasta_densa.mkdir(exist_ok=True)
 
-    # --- DEFINIÇÃO DAS ETAPAS DO PIPELINE ---
+    construtor = ConstrutorColmap()
+
+    # --- DEFINIÇÃO DAS ETAPAS DO PIPELINE USANDO O CONSTRUTOR ---
     etapas = [
         # Etapa 1: Feature Extractor
-        (f"colmap feature_extractor --database_path {db_path} --image_path {dir_img}",
-         "Extração de Features"),
+        (construtor.montar("feature_extractor", {
+            "database_path": db_path,
+            "image_path": pasta_frames
+        }), "Extração de Features"),
 
         # Etapa 2: Matcher
-        (f"colmap exhaustive_matcher --database_path {db_path}",
-         "Matcher Exaustivo"),
+        (construtor.montar("exhaustive_matcher", {
+            "database_path": db_path
+        }), "Matcher Exaustivo"),
 
         # Etapa 3: Mapper
-        (f"colmap mapper --database_path {db_path} --image_path {dir_img} --output_path \"{pasta_esparsa.resolve()}\"",
-         "Reconstrução Esparsa"),
+        (construtor.montar("mapper", {
+            "database_path": db_path,
+            "image_path": pasta_frames,
+            "output_path": pasta_esparsa
+        }), "Reconstrução Esparsa"),
 
         # Etapa 4: Undistorter
-        (f"colmap image_undistorter --image_path {dir_img} --input_path \"{pasta_esparsa.resolve() / '0'}\" --output_path \"{pasta_densa.resolve()}\" --output_type COLMAP",
-         "Retificação de Imagens"),
+        (construtor.montar("image_undistorter", {
+            "image_path": pasta_frames,
+            "input_path": pasta_esparsa / "0",
+            "output_path": pasta_densa,
+            "output_type": "COLMAP"
+        }), "Retificação de Imagens"),
 
-        # Etapa 5: Patch Match (Aqui a flag costuma ser estável, mas se der erro, remova o gpu_index)
-        (f"colmap patch_match_stereo --workspace_path \"{pasta_densa.resolve()}\"",
-         "Estéreo Patch Match"),
+        # Etapa 5: Patch Match
+        (construtor.montar("patch_match_stereo", {
+            "workspace_path": pasta_densa
+        }), "Estéreo Patch Match"),
 
         # Etapa 6: Fusion
-        (f"colmap stereo_fusion --workspace_path \"{pasta_densa.resolve()}\" --output_path \"{pasta_densa.resolve() / 'modelo_fusionado.ply'}\"",
-         "Fusão (Point Cloud)"),
+        (construtor.montar("stereo_fusion", {
+            "workspace_path": pasta_densa,
+            "output_path": pasta_densa / "modelo_fusionado.ply"
+        }), "Fusão (Point Cloud)"),
 
         # Etapa 7: Poisson Mesher
-        (f"colmap poisson_mesher --input_path \"{pasta_densa.resolve() / 'modelo_fusionado.ply'}\" --output_path \"{pasta_densa.resolve() / 'malha_final.ply'}\"",
-         "Geração de Malha (Poisson)")
+        (construtor.montar("poisson_mesher", {
+            "input_path": pasta_densa / "modelo_fusionado.ply",
+            "output_path": pasta_densa / "malha_final.ply"
+        }), "Geração de Malha (Poisson)")
     ]
 
     print(f"\n[RECONSTRUÇÃO] Iniciando pipeline para o projeto: {pasta_projeto_saida.name}")
@@ -93,6 +143,9 @@ def executar_pipeline_reconstrucao_3d(pasta_frames: Path, pasta_projeto_saida: P
         with tqdm(total=len(etapas), desc="Progresso COLMAP", unit="etapa", ncols=80) as barra:
             for indice, (comando, descricao) in enumerate(etapas, 1):
                 barra.set_postfix_str(descricao)
+
+                # Log do comando gerado para fins de depuração
+                logging.info(f"--- EXECUTANDO: {comando} ---")
 
                 executar_comando(comando)
 
@@ -107,5 +160,5 @@ def executar_pipeline_reconstrucao_3d(pasta_frames: Path, pasta_projeto_saida: P
 
     except Exception as erro:
         print(f"\n[ERRO FATAL] O pipeline falhou: {erro}")
-        print(f"[INFO] Verifique o arquivo {arquivo_log} para mais detalhes.")
+        print(f"[INFO] Verifique o arquivo {arquivo_log.name} para mais detalhes.")
         return False
