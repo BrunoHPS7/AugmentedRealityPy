@@ -1,7 +1,8 @@
 # Pipeline de Execução (Ordem Lógica):
 # "CameraCalibration" -> "OpenCV" -> "Normalize" -> "Reconstruction" -> "Visualization"
-execution_mode: "Normalize"
-remote_mode: False
+execution_mode: "Reconstruction"
+remote_mode: false
+reconstruction_mode: stereo #mono/stereo
 
 paths:
   # 1. Calibração
@@ -18,14 +19,15 @@ paths:
   frames_output: "data/out/frames"
 
   # 3. Reconstrução
-  colmap_input: "data/out/frames"
+  colmap_input: "data/out/frames/mono"
+  colmap_input_stereo: "data/out/frames/stereo" #Onde cada projeto possui subpasta direita e esquerda
   colmap_output: "data/out/reconstructions"
   resources: "resources"
 
   # 4. Remoto
   video_input_remote: "/home/bhzinn/Vídeos/Hidamari/goku.mp4"
   frames_output_remote: "data/out/frames"
-  colmap_input_remote: "data/out/frames/images"
+  colmap_input_remote: "data/out/frames/Images"
   colmap_output_remote: "data/out/reconstructions"
   resources_remote: "resources"
 

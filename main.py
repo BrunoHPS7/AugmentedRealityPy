@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional
 from src.camera_calibration import executar_calibracao_mono, executar_calibracao_stereo
 from src.acquisition import extrair_e_salvar_frames_por_segundo
 from src.acquisition import normalize_images_clahe
-from src.reconstruction import executar_pipeline_reconstrucao_3d
+from src.reconstruction import executar_pipeline_reconstrucao_3d, executar_pipeline_reconstrucao_3d_stereo
 from src.visualization import renderizar_visualizacao_3d
 
 # Tratamento do Tkinter para o CLI:
@@ -176,28 +176,63 @@ def processar_reconstrucao(cfg: Dict[str, Any]) -> bool:
     """ETAPA 3: Pipeline Structure-from-Motion (SfM) via COLMAP."""
     print("\n--- MODO: RECONSTRUÇÃO 3D (COLMAP) ---")
 
-    # Verificar modo de interação:
+    modo_reconstrucao = cfg.get("reconstruction_mode", "mono").lower()
     is_remote = cfg.get("remote_mode", False)
 
-    # Caminhos Frames
-    if is_remote:
-        pasta_frames = Path(cfg["paths"]["colmap_input_remote"])
+    # --- DEFINIÇÃO DOS CAMINHOS DE ORIGEM ---
+    if modo_reconstrucao == "stereo":
+        # Busca no YAML a nova pasta separada para estéreo
+        caminho_local = cfg["paths"].get("colmap_input_stereo", "data/out/frames/stereo")
+        # Se for remoto, tenta pegar a chave remota estéreo, senão usa a local como fallback
+        caminho_remoto = cfg["paths"].get("colmap_input_remote_stereo", caminho_local)
     else:
-        pasta_base_frames = Path(cfg["paths"]["frames_output"])
-        pasta_frames = pedir_diretorio("Selecione a pasta de frames", pasta_base_frames)
+        # Busca no YAML a pasta para mono
+        caminho_local = cfg["paths"].get("colmap_input", "data/out/frames/mono")
+        caminho_remoto = cfg["paths"].get("colmap_input_remote", caminho_local)
+
+    # --- SELEÇÃO DO PROJETO ---
+    if is_remote:
+        pasta_frames = Path(caminho_remoto)
+    else:
+        pasta_base_frames = Path(caminho_local)
+
+        # O texto do prompt muda para orientar o usuário
+        if modo_reconstrucao == "stereo":
+            titulo_janela = "Selecione o Projeto Estéreo (Contém subpastas)"
+        else:
+            titulo_janela = "Selecione o Projeto Mono (Contém frames)"
+
+        pasta_frames = pedir_diretorio(titulo_janela, pasta_base_frames)
+
     if not pasta_frames or not pasta_frames.exists():
-        print("[ERRO] Pasta de frames inválida ou não selecionada.")
+        print("[ERRO] Pasta do projeto inválida ou não encontrada.")
         return False
 
-    nome_reconstrucao = input("Nome para esta reconstrução (ex: modelo_final): ").strip()
-    if not nome_reconstrucao: return False
+    # Sugere o nome do próprio projeto como nome da reconstrução
+    nome_reconstrucao = input(f"Nome para esta reconstrução (Padrão: {pasta_frames.name}): ").strip()
+    if not nome_reconstrucao:
+        nome_reconstrucao = pasta_frames.name
 
     pasta_saida = Path(cfg["paths"]["colmap_output"]) / nome_reconstrucao
     if pasta_saida.exists():
         print("[ERRO] Nome já existente no diretório de saída.")
         return False
 
-    return executar_pipeline_reconstrucao_3d(pasta_frames, pasta_saida)
+    # --- ROTEAMENTO E EXECUÇÃO ---
+    if modo_reconstrucao == "stereo":
+        print("\n[INFO] Roteamento: Pipeline Estéreo selecionada.")
+        try:
+            baseline = float(
+                input("Digite a distância (baseline) entre as câmeras em metros (ex: 0.15): ").replace(",", "."))
+        except ValueError:
+            print("[ERRO] Entrada numérica inválida para o baseline.")
+            return False
+
+        return executar_pipeline_reconstrucao_3d_stereo(pasta_frames, pasta_saida, baseline)
+
+    else:
+        print("\n[INFO] Roteamento: Pipeline Mono selecionada.")
+        return executar_pipeline_reconstrucao_3d(pasta_frames, pasta_saida)
 
 
 def processar_visualizacao(cfg: Dict[str, Any]) -> bool:
