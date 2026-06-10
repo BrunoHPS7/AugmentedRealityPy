@@ -1,6 +1,15 @@
 # Pipeline de Execução (Ordem Lógica):
+# Os modos de execução são:
+# 1. "CameraCalibration": Realiza a calibração da câmera usando imagens de um tabuleiro de xadrez.
+# 2. "OpenCV": Extrai frames de vídeos usando OpenCV.
+# 3. "Normalize": Normaliza os frames extraídos para garantir consistência na reconstrução.
+# 4. "Reconstruction": Realiza a reconstrução 3D a partir dos frames normalizados.
+# 5. "Visualization": Visualiza a reconstrução 3D.
+# O modo de execução pode ser configurado para rodar apenas uma etapa específica ou toda a pipeline, dependendo das necessidades do usuário.
+# O modo "remote_mode" indica se a execução será feita em um ambiente remoto, onde os caminhos de entrada e saída podem ser diferentes dos locais.
+# A ordem de execução recomendada é seguir a sequência lógica das etapas, começando pela calibração da câmera, seguida pela extração de frames, normalização, reconstrução e, finalmente, visualização. No entanto, o usuário pode escolher executar apenas uma etapa específica se desejar, desde que as etapas anteriores tenham sido concluídas com sucesso.
 # "CameraCalibration" -> "OpenCV" -> "Normalize" -> "Reconstruction" -> "Visualization"
-execution_mode: "Normalize"
+execution_mode: "Reconstruction"
 remote_mode: False
 
 paths:
