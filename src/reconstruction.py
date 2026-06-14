@@ -1,5 +1,6 @@
 import subprocess
 import logging
+import time
 from pathlib import Path
 from tqdm import tqdm
 from typing import Dict, Any, Optional
@@ -148,7 +149,12 @@ def executar_pipeline_reconstrucao_3d(pasta_frames: Path, pasta_projeto_saida: P
                 # Log do comando gerado para fins de depuração
                 logging.info(f"--- EXECUTANDO: {comando} ---")
 
+                inicio_etapa = time.time()
                 executar_comando(comando)
+                tempo_decorrido = time.time() - inicio_etapa
+
+                tqdm.write(f"[TIMER] '{descricao}' concluída em {tempo_decorrido:.2f} segundos.")
+                logging.info(f"--- TEMPO '{descricao}': {tempo_decorrido:.2f}s ---")
 
                 # Verificação crítica após o Mapper
                 if indice == 3 and not (pasta_esparsa / "0").exists():
@@ -293,7 +299,12 @@ def executar_pipeline_reconstrucao_3d_stereo(pasta_frames: Path, pasta_projeto_s
                 barra.set_postfix_str(descricao)
                 logging.info(f"--- EXECUTANDO: {comando} ---")
 
+                inicio_etapa = time.time()
                 executar_comando(comando)
+                tempo_decorrido = time.time() - inicio_etapa
+
+                tqdm.write(f"[TIMER] '{descricao}' concluída em {tempo_decorrido:.2f} segundos.")
+                logging.info(f"--- TEMPO '{descricao}': {tempo_decorrido:.2f}s ---")
 
                 # Verificações de segurança ajustadas aos novos índices
                 if "Reconstrução Esparsa" in descricao and not (pasta_esparsa / "0").exists():
