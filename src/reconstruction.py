@@ -101,9 +101,9 @@ def executar_pipeline_reconstrucao_3d(pasta_frames: Path, pasta_projeto_saida: P
         }), "Extração de Features"),
 
         # Etapa 2: Matcher
-        (construtor.montar("exhaustive_matcher", {
+        (construtor.montar("sequential_matcher", {
             "database_path": db_path
-        }), "Matcher Exaustivo"),
+        }), "Matcher Sequencial"),
 
         # Etapa 3: Mapper
         (construtor.montar("mapper", {
@@ -237,9 +237,9 @@ def executar_pipeline_reconstrucao_3d_stereo(pasta_frames: Path, pasta_projeto_s
         }), "Extração de Features (Estéreo)"),
 
         # Etapa 2: Matcher
-        (construtor.montar("exhaustive_matcher", {
+        (construtor.montar("sequential_matcher", {
             "database_path": db_path
-        }), "Matcher Exaustivo"),
+        }), "Matcher Sequencial"),
 
         # Etapa 3: Mapper
         (construtor.montar("mapper", {
