@@ -56,8 +56,8 @@ def configurar_logging(caminho_projeto: Path) -> Path:
     return arquivo_log
 
 
-def executar_comando(comando_shell: str):
-    """Executa um comando de sistema silenciosamente, guardando o output no log."""
+def executar_comando(comando_shell: str, progress_callback=None, status_prefix: str = ""):
+    """Executa um comando de sistema silenciosamente, guardando o output no log e repassando sub-etapas cruciais à UI."""
     processo = subprocess.Popen(
         comando_shell, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, encoding='utf-8', errors='replace'
@@ -68,13 +68,19 @@ def executar_comando(comando_shell: str):
         if conteudo:
             logging.info(conteudo)
 
+            # Repassa sub-etapas cruciais e iterações pesadas em tempo real para a interface Flet
+            if progress_callback and any(
+                    k in conteudo for k in ["Registering", "Iter", "Bundle", "PatchMatch", "Fusion"]):
+                resumo = conteudo if len(conteudo) < 60 else f"{conteudo[:57]}..."
+                progress_callback(None, f"{status_prefix} ({resumo})")
+
     processo.wait()
     if processo.returncode != 0:
         raise subprocess.CalledProcessError(processo.returncode, comando_shell)
 
 
-def executar_pipeline_reconstrucao_mono(pasta_frames: Path, pasta_projeto_saida: Path) -> bool:
-    """Pipeline COLMAP em 7 etapas com suporte automático para Mono e Stereo via pastas."""
+def executar_pipeline_reconstrucao_mono(pasta_frames: Path, pasta_projeto_saida: Path, progress_callback=None) -> bool:
+    """Pipeline COLMAP em 7 etapas com suporte automático para Mono e Stereo via pastas e integração de logs na UI."""
 
     # Configurações globais que podem ser mescladas nos dicionários de parâmetros depois
     CONFIG = {"threads": -1, "use_gpu": 1, "max_img_size": 4000}
@@ -141,6 +147,7 @@ def executar_pipeline_reconstrucao_mono(pasta_frames: Path, pasta_projeto_saida:
     print(f"\n[RECONSTRUÇÃO] Iniciando pipeline para o projeto: {pasta_projeto_saida.name}")
     print(f"[LOG] Acompanhe os detalhes técnicos em: {arquivo_log.name}\n")
 
+    total_etapas = len(etapas)
     try:
         with tqdm(total=len(etapas), desc="Progresso COLMAP", unit="etapa", ncols=80) as barra:
             for indice, (comando, descricao) in enumerate(etapas, 1):
@@ -149,8 +156,13 @@ def executar_pipeline_reconstrucao_mono(pasta_frames: Path, pasta_projeto_saida:
                 # Log do comando gerado para fins de depuração
                 logging.info(f"--- EXECUTANDO: {comando} ---")
 
+                # Atualiza a interface gráfica com a porcentagem exata da nova etapa
+                if progress_callback:
+                    progresso_calculado = (indice - 1) / total_etapas
+                    progress_callback(progresso_calculado, f"Etapa {indice}/{total_etapas}: {descricao}")
+
                 inicio_etapa = time.time()
-                executar_comando(comando)
+                executar_comando(comando, progress_callback, f"Etapa {indice}/{total_etapas}: {descricao}")
                 tempo_decorrido = time.time() - inicio_etapa
 
                 tqdm.write(f"[TIMER] '{descricao}' concluída em {tempo_decorrido:.2f} segundos.")
@@ -162,12 +174,15 @@ def executar_pipeline_reconstrucao_mono(pasta_frames: Path, pasta_projeto_saida:
 
                 barra.update(1)
 
+        if progress_callback:
+            progress_callback(1.0, "Reconstrução finalizada com sucesso!")
         print("\n[SUCESSO] Reconstrução finalizada com sucesso!")
         return True
 
     except Exception as erro:
         print(f"\n[ERRO FATAL] O pipeline falhou: {erro}")
         print(f"[INFO] Verifique o arquivo {arquivo_log.name} para mais detalhes.")
+        logging.error(f"Erro fatal no pipeline mono: {erro}")
         return False
 
 
@@ -199,8 +214,8 @@ def gerar_configuracao_rig(caminho_arquivo_json: Path, baseline_metros: float):
 
 
 def executar_pipeline_reconstrucao_3d_stereo(pasta_frames: Path, pasta_projeto_saida: Path,
-                                             baseline_metros: float) -> bool:
-    """Pipeline COLMAP Estéreo atualizado para versões novas (substitui rig_bundle_adjuster)."""
+                                             baseline_metros: float, progress_callback=None) -> bool:
+    """Pipeline COLMAP Estéreo atualizado para versões novas (substitui rig_bundle_adjuster) com suporte a feedback na UI."""
 
     pasta_projeto_saida.mkdir(parents=True, exist_ok=True)
     arquivo_log = configurar_logging(pasta_projeto_saida)
@@ -293,14 +308,19 @@ def executar_pipeline_reconstrucao_3d_stereo(pasta_frames: Path, pasta_projeto_s
     print(f"\n[RECONSTRUÇÃO ESTÉREO] Iniciando pipeline para: {pasta_projeto_saida.name}")
     print(f"[INFO] Baseline: {baseline_metros}m")
 
+    total_etapas = len(etapas)
     try:
         with tqdm(total=len(etapas), desc="Progresso Estéreo", unit="etapa", ncols=80) as barra:
             for indice, (comando, descricao) in enumerate(etapas, 1):
                 barra.set_postfix_str(descricao)
                 logging.info(f"--- EXECUTANDO: {comando} ---")
 
+                if progress_callback:
+                    progresso_calculado = (indice - 1) / total_etapas
+                    progress_callback(progresso_calculado, f"Etapa {indice}/{total_etapas}: {descricao}")
+
                 inicio_etapa = time.time()
-                executar_comando(comando)
+                executar_comando(comando, progress_callback, f"Etapa {indice}/{total_etapas}: {descricao}")
                 tempo_decorrido = time.time() - inicio_etapa
 
                 tqdm.write(f"[TIMER] '{descricao}' concluída em {tempo_decorrido:.2f} segundos.")
@@ -315,9 +335,12 @@ def executar_pipeline_reconstrucao_3d_stereo(pasta_frames: Path, pasta_projeto_s
 
                 barra.update(1)
 
+        if progress_callback:
+            progress_callback(1.0, "Reconstrução Estéreo concluída!")
         print("\n[SUCESSO] Reconstrução Estéreo finalizada na escala real!")
         return True
 
     except Exception as erro:
         print(f"\n[ERRO FATAL] O pipeline estéreo falhou: {erro}")
+        logging.error(f"Erro fatal no pipeline estéreo: {erro}")
         return False
