@@ -507,9 +507,20 @@ def main(page: ft.Page):
         alignment=ft.alignment.center
     )
 
-    body = ft.Row([nav_rail, ft.VerticalDivider(width=1), main_content_container], expand=True)
+    # 1. Criamos uma coluna que agrupa o conteúdo principal e o footer
+    content_area = ft.Column(
+        controls=[
+            main_content_container,  # Como ele tem expand=True, empurrará o footer para baixo
+            footer
+        ],
+        expand=True  # Permite que a área ocupe o restante da tela à direita do menu
+    )
 
-    page.add(header, body, footer)
+    # 2. Colocamos a nova content_area ao lado do menu lateral, em vez de colocar só o main_content_container
+    body = ft.Row([nav_rail, ft.VerticalDivider(width=1), content_area], expand=True)
+
+    # 3. Adicionamos apenas header e body à página. O footer já está dentro do body agora.
+    page.add(header, body)
 
 
 if __name__ == "__main__":
