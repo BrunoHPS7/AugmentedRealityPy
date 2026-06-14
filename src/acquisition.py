@@ -1,96 +1,67 @@
-import os
 import cv2
 from pathlib import Path
 from tqdm import tqdm
+from typing import Callable, Optional
 
 
-def obter_taxa_quadros_video(captura) -> float:
-    """Extrai a taxa de quadros (FPS) de um objeto VideoCapture."""
-    return captura.get(cv2.CAP_PROP_FPS)
+def _get_video_fps(capture: cv2.VideoCapture) -> float:
+    """Extrai a taxa de quadros nativa (FPS) de um objeto VideoCapture."""
+    return capture.get(cv2.CAP_PROP_FPS)
 
 
-def extrair_e_salvar_frames_por_segundo(caminho_video: Path, diretorio_saida: Path, fps_desejado: int) -> bool:
-    """Extrai frames de um vídeo com base no FPS desejado, com barra de progresso no terminal."""
+def extract_frames_from_video(
+    video_path: Path,
+    output_dir: Path,
+    desired_fps: int,
+    progress_callback: Optional[Callable[[float], None]] = None
+) -> bool:
+    """
+    Extrai quadros sequenciais de um vídeo com base em uma taxa alvo (Target FPS).
+    Essencial para reduzir redundância de dados em pipelines de fotogrametria.
+    """
+    video_path = Path(video_path)
+    output_dir = Path(output_dir)
 
-    captura_video = cv2.VideoCapture(str(caminho_video))
-    if not captura_video.isOpened():
-        print(f"[ERRO] Falha ao abrir o vídeo: {caminho_video}")
+    capture = cv2.VideoCapture(str(video_path))
+    if not capture.isOpened():
+        print(f"[ERROR] Failed to open video: {video_path}")
         return False
 
-    fps_nativo = obter_taxa_quadros_video(captura_video)
-    total_quadros = int(captura_video.get(cv2.CAP_PROP_FRAME_COUNT))
+    native_fps = _get_video_fps(capture)
+    total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    if fps_desejado <= 0 or total_quadros <= 0:
-        captura_video.release()
+    if desired_fps <= 0 or total_frames <= 0:
+        capture.release()
         return False
 
-    diretorio_saida.mkdir(parents=True, exist_ok=True)
-    nome_projeto = diretorio_saida.name
+    output_dir.mkdir(parents=True, exist_ok=True)
+    project_name = output_dir.name
 
-    intervalo_pulo = max(1, int(fps_nativo / fps_desejado))
-    contador_salvos = 1
+    # 1. Cálculo do intervalo de amostragem temporal (Downsampling)
+    # Exemplo matemático: Vídeo a 60 FPS nativo -> Desejo 2 FPS = Salva 1 a cada 30 frames.
+    skip_interval = max(1, int(native_fps / desired_fps))
+    saved_counter = 1
 
-    print(f"\n[EXTRAÇÃO] Iniciando processamento do vídeo (FPS Nativo: {fps_nativo:.2f} -> Desejado: {fps_desejado})")
+    print(f"\n[ACQUISITION] Starting video processing (Native FPS: {native_fps:.2f} -> Target: {desired_fps})")
 
-    # tqdm cria uma barra de progresso linda direto no terminal
-    for indice_frame in tqdm(range(total_quadros), desc="Extraindo Frames", unit="frame", ncols=80):
-        sucesso, frame = captura_video.read()
-        if not sucesso:
+    # 2. Loop de extração sequencial
+    for frame_idx in tqdm(range(total_frames), desc="Extracting Frames", unit="frame", ncols=80, leave=False):
+        success, frame = capture.read()
+        if not success:
             break
 
-        if indice_frame % intervalo_pulo == 0:
-            nome_arquivo = f"{nome_projeto}_{contador_salvos:03d}.png"
-            caminho_arquivo = diretorio_saida / nome_arquivo
-            cv2.imwrite(str(caminho_arquivo), frame)
-            contador_salvos += 1
+        # Apenas converte e salva a imagem se ela cair no intervalo de amostragem correto
+        if frame_idx % skip_interval == 0:
+            # Formatação do nome com zeros à esquerda (ex: projeto_001.png) para ordenação alfanumérica correta no COLMAP
+            file_name = f"{project_name}_{saved_counter:03d}.png"
+            file_path = output_dir / file_name
+            cv2.imwrite(str(file_path), frame)
+            saved_counter += 1
 
-    captura_video.release()
-    print(f"[SUCESSO] Extração concluída! {contador_salvos - 1} imagens salvas em: {diretorio_saida}")
-    return True
+        # Notifica a interface gráfica (Flet) sobre o avanço
+        if progress_callback:
+            progress_callback((frame_idx + 1) / total_frames)
 
-
-def normalize_images_clahe(input_path: Path, output_path: Path, clip_limit=2.0, tile_size=(8, 8)) -> bool:
-    """
-    Aplica a normalização CLAHE em todas as imagens de um diretório.
-    """
-    input_path = Path(input_path)
-    output_path = Path(output_path)
-
-    # Garante que a pasta de saída exista
-    output_path.mkdir(parents=True, exist_ok=True)
-
-    # Inicializa o objeto CLAHE
-    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_size)
-    valid_extensions = ('.jpg', '.jpeg', '.png', '.bmp', '.tiff')
-
-    print(f"[PROCESSAMENTO] Aplicando CLAHE...")
-
-    files = [f for f in os.listdir(input_path) if f.lower().endswith(valid_extensions)]
-
-    if not files:
-        print("[AVISO] Nenhuma imagem encontrada para normalizar.")
-        return False
-
-    for filename in tqdm(files, desc="Normalizando", unit="img", ncols=80):
-        img_full_path = input_path / filename
-        img = cv2.imread(str(img_full_path))
-
-        if img is None:
-            continue
-
-        # 1. Converte para LAB
-        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-        l, a, b = cv2.split(lab)
-
-        # 2. Aplica o CLAHE no canal L (Luminosidade)
-        l_norm = clahe.apply(l)
-
-        # 3. Mescla e converte de volta
-        combined = cv2.merge((l_norm, a, b))
-        final_img = cv2.cvtColor(combined, cv2.COLOR_LAB2BGR)
-
-        # 4. Salva o arquivo no destino
-        cv2.imwrite(str(output_path / filename), final_img)
-
-    print(f"[SUCESSO] {len(files)} imagens normalizadas em: {output_path}")
+    capture.release()
+    print(f"[SUCCESS] Extraction complete! {saved_counter - 1} images saved to: {output_dir}")
     return True

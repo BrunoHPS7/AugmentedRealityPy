@@ -73,7 +73,7 @@ def executar_comando(comando_shell: str):
         raise subprocess.CalledProcessError(processo.returncode, comando_shell)
 
 
-def executar_pipeline_reconstrucao_3d(pasta_frames: Path, pasta_projeto_saida: Path) -> bool:
+def executar_pipeline_reconstrucao_mono(pasta_frames: Path, pasta_projeto_saida: Path) -> bool:
     """Pipeline COLMAP em 7 etapas com suporte automático para Mono e Stereo via pastas."""
 
     # Configurações globais que podem ser mescladas nos dicionários de parâmetros depois
