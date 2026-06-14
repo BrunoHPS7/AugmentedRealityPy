@@ -1,43 +1,46 @@
-from typing import Any # Importante para o mock
+import pyvista as pv
 from pathlib import Path
 
-try:
-    import pyvista as pv
-    PYVISTA_AVAILABLE = True
-except Exception:
-    PYVISTA_AVAILABLE = False
-    pv = None # Ou Any, apenas para o interpretador não dar NameError
-    # Não precisa de print aqui para não sujar o CLI do SSH toda vez que importar
 
-
-def renderizar_visualizacao_3d(caminho_modelo: Path):
-    """Carrega e renderiza um modelo 3D (PLY ou OBJ) usando PyVista."""
-
-    if not caminho_modelo or not caminho_modelo.exists():
-        print(f"[ERRO] Arquivo não encontrado: {caminho_modelo}")
-        return
+def render_3d_model(model_path: Path) -> bool:
+    """
+    Carrega e renderiza um modelo 3D (PLY ou OBJ) resultante da etapa de reconstrução.
+    Permite a inspeção visual interativa da nuvem de pontos ou malha texturizada.
+    """
+    if not model_path or not model_path.exists():
+        print(f"[ERROR] Model file not found: {model_path}")
+        return False
 
     try:
-        print(f"[VISUALIZAÇÃO] Carregando modelo: {caminho_modelo.name}...")
+        print(f"[VISUALIZATION] Loading 3D model: {model_path.name}...")
 
-        geometria_3d = pv.read(str(caminho_modelo))
+        # 1. Leitura estrutural dos dados volumétricos na memória
+        mesh_geometry = pv.read(str(model_path))
 
-        visualizador = pv.Plotter(title=f"Análise Volumétrica - {caminho_modelo.name}")
-        visualizador.set_background("black")
+        # 2. Configuração do ambiente de renderização interativo (Plotter)
+        plotter = pv.Plotter(title=f"Volumetric Analysis - {model_path.name}")
+        plotter.set_background("black")
 
-        visualizador.add_mesh(
-            geometria_3d,
-            rgb=True,
-            point_size=2,
-            render_points_as_spheres=True,
-            label=caminho_modelo.name
+        # 3. Inserção da geometria na cena com parâmetros ajustados para fotogrametria
+        plotter.add_mesh(
+            mesh_geometry,
+            rgb=True,  # Habilita cores reais/textura (se embutidas no PLY/OBJ)
+            point_size=2,  # Espessura ideal para visualização de nuvens de pontos densas
+            render_points_as_spheres=True,  # Esferas melhoram a percepção de profundidade 3D
+            label=model_path.name
         )
 
-        visualizador.add_axes()
-        visualizador.show_grid(color='gray', xtitle='X', ytitle='Y', ztitle='Z')
+        # 4. Adição de guias espaciais (eixos cartesianos e grade) para auxiliar na análise métrica
+        plotter.add_axes()
+        plotter.show_grid(color='gray', xtitle='X', ytitle='Y', ztitle='Z')
 
-        print(f"[OK] Renderização iniciada.")
-        visualizador.show()
+        print(f"[SUCCESS] Rendering started.")
 
-    except Exception as erro:
-        print(f"[ERRO CRÍTICO] Falha ao renderizar modelo 3D: {erro}")
+        # Bloqueia a execução (ou abre janela independente) até o usuário fechar o visualizador
+        plotter.show()
+
+        return True
+
+    except Exception as error:
+        print(f"[CRITICAL ERROR] Failed to render 3D model: {error}")
+        return False

@@ -1,12 +1,5 @@
-# Pipeline de Execução (Ordem Lógica):
-# "CameraCalibration" -> "OpenCV" -> "Normalize" -> "Reconstruction" -> "Visualization"
-execution_mode: "Reconstruction"
-remote_mode: false
-reconstruction_mode: stereo #mono/stereo
-
 paths:
   # 1. Calibração
-  calibration_images: "data/in/images_calibrations"
   calibration_output_folder: "data/out/calibrations"
   parameters:
     calibration:
@@ -15,7 +8,6 @@ paths:
       desired_fps: 5
 
   # 2. Extração de Frames
-  video_input: "data/in/videos"
   frames_output: "data/out/frames"
 
   # 3. Reconstrução
@@ -24,13 +16,6 @@ paths:
   colmap_output: "data/out/reconstructions"
   resources: "resources"
 
-  # 4. Remoto
-  video_input_remote: "/home/bhzinn/Vídeos/Hidamari/goku.mp4"
-  frames_output_remote: "data/out/frames"
-  colmap_input_remote: "data/out/frames/Images"
-  colmap_output_remote: "data/out/reconstructions"
-  resources_remote: "resources"
-
-  # 5.  Normalização
+  # 4.  Normalização
   frames_input_normalização: "data/out/frames"
   frames_output_normalização: "data/out/normalizados"

@@ -5,7 +5,7 @@ open3d
 tqdm
 
 # Interface / Imagens
-Pillow
+flet==0.21.0
 
 # Backend / Comunicação
 PyYAML
