@@ -55,9 +55,15 @@ def main(page: ft.Page):
         page.update()
 
     # ==========================================
-    # FILE PICKERS (GERENCIAMENTO DE ESTADO)
+    # FILE PICKERS E UTILITÁRIOS DE DIRETÓRIO
     # ==========================================
     selected_paths = {}
+
+    def get_out_dir() -> str:
+        """Garante a existência de 'data/out' e força a entrada na pasta adicionando os.sep"""
+        out_path = Path("data/out").resolve()
+        out_path.mkdir(parents=True, exist_ok=True)
+        return f"{out_path}{os.sep}"
 
     def create_dir_picker(key: str, text_element: ft.Text):
         def on_result(e):
@@ -93,7 +99,14 @@ def main(page: ft.Page):
     tf_calib_dim_y = ft.TextField(label="Quinas Y (ex: 6)", value="6", expand=True)
     tf_calib_square = ft.TextField(label="Quadrado (mm)", value="25.0", expand=True)
 
-    btn_calib_b = ft.ElevatedButton("Selec. Câmera B", on_click=lambda _: picker_calib_b.get_directory_path(), width=160)
+    # Função para abrir exatamente DENTRO da pasta pessoal do usuário (Windows/Linux/Mac)
+    def open_calib_a_picker(e):
+        picker_calib_a.get_directory_path(initial_directory=f"{Path.home().resolve()}{os.sep}")
+
+    def open_calib_b_picker(e):
+        picker_calib_b.get_directory_path(initial_directory=f"{Path.home().resolve()}{os.sep}")
+
+    btn_calib_b = ft.ElevatedButton("Selec. Câmera B", on_click=open_calib_b_picker, width=160)
     row_calib_b = ft.Row([btn_calib_b, txt_calib_b], visible=False)
 
     def toggle_calib_mode(e):
@@ -140,11 +153,10 @@ def main(page: ft.Page):
         show_toast("✅ Calibração finalizada!" if success else "❌ Falha na calibração.", not success)
         page.update()
 
-    # BLOCO FORMULÁRIO (Largura Fixa para Justificar)
     form_calibration = ft.Column([
         ft.Row([dd_calib_mode, tf_calib_proj]),
         ft.Row([tf_calib_dim_x, tf_calib_dim_y, tf_calib_square]),
-        ft.Row([ft.ElevatedButton("Selec. Câmera A", on_click=lambda _: picker_calib_a.get_directory_path(), width=160), txt_calib_a]),
+        ft.Row([ft.ElevatedButton("Selec. Câmera A", on_click=open_calib_a_picker, width=160), txt_calib_a]),
         row_calib_b,
         ft.Container(height=10),
         ft.ElevatedButton("Executar Calibração", on_click=run_calibration_ui, icon=ft.icons.PLAY_ARROW, bgcolor=COLOR_PRIMARY, color=COLOR_TEXT, height=45)
@@ -190,7 +202,7 @@ def main(page: ft.Page):
 
     form_acquisition = ft.Column([
         ft.Row([tf_acq_proj, tf_acq_fps]),
-        ft.Row([ft.ElevatedButton("Selecionar Vídeo", on_click=lambda _: picker_video.pick_files(allowed_extensions=["mp4", "avi", "mov"]), width=160), txt_video]),
+        ft.Row([ft.ElevatedButton("Selecionar Vídeo", on_click=lambda _: picker_video.pick_files(allowed_extensions=["mp4", "avi", "mov"], initial_directory=get_out_dir()), width=160), txt_video]),
         ft.Container(height=10),
         ft.ElevatedButton("Extrair Frames", on_click=run_acquisition_ui, icon=ft.icons.PLAY_ARROW, bgcolor=COLOR_PRIMARY, color=COLOR_TEXT, height=45)
     ], width=550, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
@@ -215,9 +227,7 @@ def main(page: ft.Page):
     tf_norm_tile = ft.TextField(label="Tile Size (ex: 8)", value="8", expand=True)
 
     def open_norm_picker(e):
-        target_path = Path(paths.get("frames_output", "data/out/frames")).absolute()
-        target_path.mkdir(parents=True, exist_ok=True)
-        picker_norm_in.get_directory_path(initial_directory=str(target_path))
+        picker_norm_in.get_directory_path(initial_directory=get_out_dir())
 
     def run_normalization_ui(e):
         try:
@@ -276,6 +286,9 @@ def main(page: ft.Page):
         value="Mono", width=150, on_change=toggle_recon_mode
     )
 
+    def open_recon_picker(e):
+        picker_recon_in.get_directory_path(initial_directory=get_out_dir())
+
     def run_reconstruction_ui(e):
         proj_name = tf_recon_proj.value.strip()
         if not selected_paths.get("recon_in") or not proj_name:
@@ -304,7 +317,7 @@ def main(page: ft.Page):
 
     form_reconstruction = ft.Column([
         ft.Row([dd_recon_mode, tf_recon_proj, tf_recon_base]),
-        ft.Row([ft.ElevatedButton("Selecionar Projeto", on_click=lambda _: picker_recon_in.get_directory_path(), width=160), txt_recon_in]),
+        ft.Row([ft.ElevatedButton("Selecionar Projeto", on_click=open_recon_picker, width=160), txt_recon_in]),
         ft.Container(height=10),
         ft.ElevatedButton("Iniciar SfM e Dense MVS", on_click=run_reconstruction_ui, icon=ft.icons.PLAY_ARROW, bgcolor=COLOR_PRIMARY, color=COLOR_TEXT, height=45)
     ], width=550, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
@@ -333,7 +346,7 @@ def main(page: ft.Page):
         render_3d_model(selected_paths["model"])
 
     form_visualization = ft.Column([
-        ft.Row([ft.ElevatedButton("Selecionar Malha", on_click=lambda _: picker_model.pick_files(allowed_extensions=["ply", "obj"]), width=160), txt_model]),
+        ft.Row([ft.ElevatedButton("Selecionar Malha", on_click=lambda _: picker_model.pick_files(allowed_extensions=["ply", "obj"], initial_directory=get_out_dir()), width=160), txt_model]),
         ft.Container(height=10),
         ft.ElevatedButton("Renderizar Modelo", on_click=run_visualization_ui, icon=ft.icons.PLAY_CIRCLE_FILL, bgcolor=COLOR_PRIMARY, color=COLOR_TEXT, height=45)
     ], width=550, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
@@ -352,6 +365,7 @@ def main(page: ft.Page):
     # TELA 6: DADOS
     # ==========================================
     def open_folder(target_path: Path):
+        target_path = target_path.resolve()
         target_path.mkdir(parents=True, exist_ok=True)
         try:
             if platform.system() == "Windows": os.startfile(target_path)
@@ -364,7 +378,7 @@ def main(page: ft.Page):
     form_files = ft.Column([
         ft.Text("Acesse rapidamente os diretórios onde os dados estão salvos.", color=COLOR_SUBTEXT, text_align=ft.TextAlign.CENTER),
         ft.Container(height=15),
-        ft.ElevatedButton("Abrir Pasta Raiz (data)", icon=ft.icons.FOLDER_SPECIAL, bgcolor=COLOR_PRIMARY, color=COLOR_TEXT, height=45),
+        ft.ElevatedButton("Abrir Pasta Raiz (data/out)", icon=ft.icons.FOLDER_SPECIAL, bgcolor=COLOR_PRIMARY, color=COLOR_TEXT, height=45, on_click=lambda _: open_folder(Path("data/out"))),
         ft.Container(height=15),
         ft.Text("Acesso Direto aos Subdiretórios:", weight="bold", text_align=ft.TextAlign.CENTER),
         ft.Row([
@@ -437,6 +451,7 @@ def main(page: ft.Page):
     body = ft.Row([nav_rail, ft.VerticalDivider(width=1), main_content_container], expand=True)
 
     page.add(header, body, footer)
+
 
 if __name__ == "__main__":
     ft.app(target=main)

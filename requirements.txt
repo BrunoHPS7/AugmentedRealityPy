@@ -5,7 +5,6 @@ open3d
 tqdm
 
 # Interface / Imagens
-flet==0.21.0
-
+flet==0.21.2
 # Backend / Comunicação
 PyYAML
