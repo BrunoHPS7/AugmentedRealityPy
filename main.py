@@ -8,7 +8,7 @@ import os
 
 from src.camera_calibration import run_mono_calibration, run_stereo_calibration
 from src.acquisition import extract_frames_from_video
-from src.post_processing import run_clahe_enhancement
+from src.post_processing import run_clahe_enhancement, run_resize_images
 from src.reconstruction import executar_pipeline_reconstrucao_mono, executar_pipeline_reconstrucao_3d_stereo
 from src.visualization import render_3d_model
 
@@ -21,7 +21,7 @@ def load_config(config_path: Path = Path("config.yaml")) -> Dict[str, Any]:
 def main(page: ft.Page):
     # --- CONFIGURAÇÕES DA JANELA E TEMA ---
     page.title = "AugmentedRealityPy - UFOP/ICEA"
-    page.theme_mode = ft.ThemeMode.DARK  # Mantém o fundo escuro cinza
+    page.theme_mode = ft.ThemeMode.DARK
     page.window_width = 1150
     page.window_height = 850
     page.window_center()
@@ -60,7 +60,6 @@ def main(page: ft.Page):
     selected_paths = {}
 
     def get_out_dir() -> str:
-        """Garante a existência de 'data/out' e força a entrada na pasta adicionando os.sep"""
         out_path = Path("data/out").resolve()
         out_path.mkdir(parents=True, exist_ok=True)
         return f"{out_path}{os.sep}"
@@ -103,7 +102,6 @@ def main(page: ft.Page):
     tf_calib_dim_y = ft.TextField(label="Quinas Y (ex: 6)", value="6", expand=True)
     tf_calib_square = ft.TextField(label="Quadrado (mm)", value="25.0", expand=True)
 
-    # Função para abrir exatamente DENTRO da pasta pessoal do usuário (Windows/Linux/Mac)
     def open_calib_a_picker(e):
         picker_calib_a.get_directory_path(initial_directory=f"{Path.home().resolve()}{os.sep}")
 
@@ -231,46 +229,99 @@ def main(page: ft.Page):
     )
 
     # ==========================================
-    # TELA 3: NORMALIZAÇÃO
+    # TELA 3: PRÉ-PROCESSAMENTO (RESIZE E CLAHE)
     # ==========================================
     txt_norm_in = ft.Text("Nenhuma pasta...", color=COLOR_SUBTEXT, expand=True, no_wrap=True,
                           overflow=ft.TextOverflow.ELLIPSIS)
     picker_norm_in = create_dir_picker("norm_in", txt_norm_in)
 
+    chk_resize = ft.Checkbox(label="Redimensionar Imagens", value=True)
+    tf_resize_w = ft.TextField(label="Largura Alvo", value="4000", expand=True)
+    tf_resize_h = ft.TextField(label="Altura Alvo", value="3000", expand=True)
+
+    chk_clahe = ft.Checkbox(label="Aplicar CLAHE", value=True)
     tf_norm_clip = ft.TextField(label="Clip Limit", value="2.0", expand=True)
-    tf_norm_tile = ft.TextField(label="Tile Size (ex: 8)", value="8", expand=True)
+    tf_norm_tile = ft.TextField(label="Tile Size", value="8", expand=True)
 
     def open_norm_picker(e):
         picker_norm_in.get_directory_path(initial_directory=get_out_dir())
 
     def run_normalization_ui(e):
+        if not selected_paths.get("norm_in"):
+            show_toast("Selecione a pasta base de entrada!", True)
+            return
+
         try:
             clip = float(tf_norm_clip.value.replace(",", "."))
             tile = (int(tf_norm_tile.value), int(tf_norm_tile.value))
+            t_w = int(tf_resize_w.value)
+            t_h = int(tf_resize_h.value)
         except ValueError:
-            show_toast("Valores inválidos!", True)
-            return
-
-        if not selected_paths.get("norm_in"):
-            show_toast("Selecione a pasta!", True)
+            show_toast("Valores inválidos nos campos!", True)
             return
 
         in_dir = selected_paths["norm_in"]
-        out_dir = Path(paths.get("frames_output_normalização", "data/out/normalizados")) / f"{in_dir.name}_norm"
-        global_progress.visible, global_status.value = True, "Aplicando CLAHE..."
-        page.update()
+        base_out_dir = Path(paths.get("frames_output_normalização", "data/out/normalizados"))
 
-        success = run_clahe_enhancement(in_dir, out_dir, clip_limit=clip, tile_size=tile,
+        run_res = chk_resize.value
+        run_cla = chk_clahe.value
+
+        if not run_res and not run_cla:
+            show_toast("Selecione pelo menos uma etapa (Resize ou CLAHE)!", True)
+            return
+
+        current_input_dir = in_dir
+        success = True
+
+        # Etapa 1: Redimensionamento
+        if run_res:
+            out_resize = base_out_dir / f"{in_dir.name}_resized"
+            global_progress.visible, global_status.value = True, "1/2: Redimensionando imagens..."
+            page.update()
+
+            success = run_resize_images(current_input_dir, out_resize, target_size=(t_h, t_w),
                                         progress_callback=update_progress)
+
+            if not success:
+                show_toast("❌ Falha no Redimensionamento.", True)
+                global_progress.visible, global_status.value = False, ""
+                page.update()
+                return
+
+            current_input_dir = out_resize
+
+            # Etapa 2: CLAHE
+        if run_cla:
+            folder_sufix = f"{in_dir.name}_resized_clahe" if run_res else f"{in_dir.name}_clahe"
+            out_clahe = base_out_dir / folder_sufix
+
+            step_text = "2/2: Aplicando CLAHE..." if run_res else "Aplicando CLAHE..."
+            global_progress.visible, global_status.value = True, step_text
+            page.update()
+
+            success = run_clahe_enhancement(current_input_dir, out_clahe, clip_limit=clip, tile_size=tile,
+                                            progress_callback=update_progress)
+
+            if not success:
+                show_toast("❌ Falha na aplicação do CLAHE.", True)
+                global_progress.visible, global_status.value = False, ""
+                page.update()
+                return
+
         global_progress.visible, global_status.value = False, ""
-        show_toast("✅ Normalização concluída!" if success else "❌ Falha.", not success)
+        show_toast("✅ Processamento em lote concluído com sucesso!")
         page.update()
 
     form_normalization = ft.Column([
-        ft.Row([tf_norm_clip, tf_norm_tile]),
         ft.Row([ft.ElevatedButton("Selecionar Pasta", on_click=open_norm_picker, width=160), txt_norm_in]),
+        ft.Divider(),
+        chk_resize,
+        ft.Row([tf_resize_w, tf_resize_h]),
+        ft.Divider(),
+        chk_clahe,
+        ft.Row([tf_norm_clip, tf_norm_tile]),
         ft.Container(height=10),
-        ft.ElevatedButton("Aplicar CLAHE", on_click=run_normalization_ui, icon=ft.icons.PLAY_ARROW,
+        ft.ElevatedButton("Processar Imagens", on_click=run_normalization_ui, icon=ft.icons.PLAY_ARROW,
                           bgcolor=COLOR_PRIMARY, color=COLOR_TEXT, height=45)
     ], width=550, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
 
@@ -278,7 +329,7 @@ def main(page: ft.Page):
         alignment=ft.alignment.center, padding=25,
         content=ft.Column([
             ft.Icon(ft.icons.IMAGE_SEARCH, size=40, color=COLOR_ICON),
-            ft.Text("Melhoria de Contraste e Luminosidade", size=24, weight="bold", color=COLOR_TEXT),
+            ft.Text("Pré-Processamento (Resize e Contraste)", size=24, weight="bold", color=COLOR_TEXT),
             ft.Container(height=10),
             form_normalization
         ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
@@ -314,20 +365,17 @@ def main(page: ft.Page):
 
         out_dir = Path(paths.get("colmap_output", "data/out/reconstructions")) / proj_name
 
-        # Prepara a UI para receber atualizações passo a passo
         global_progress.visible = True
         global_progress.value = 0.0
         global_status.value = "Iniciando estruturas de dados..."
         page.update()
 
-        # Função auxiliar de callback que o processo CLI vai alimentar em tempo real
         def colmap_ui_callback(val: float, texto: str):
             if val is not None:
                 global_progress.value = val
             global_status.value = texto
             page.update()
 
-        # Executa em segundo plano dependendo do modo selecionado passando o callback
         if dd_recon_mode.value == "Mono":
             success = executar_pipeline_reconstrucao_mono(
                 selected_paths["recon_in"], out_dir, progress_callback=colmap_ui_callback
@@ -344,7 +392,6 @@ def main(page: ft.Page):
                 selected_paths["recon_in"], out_dir, base, progress_callback=colmap_ui_callback
             )
 
-        # Finalização da UI
         global_progress.visible = False
         global_progress.value = 0.0
         global_status.value = ""
@@ -451,37 +498,57 @@ def main(page: ft.Page):
     )
 
     # ==========================================
-    # LAYOUT PRINCIPAL E NAVEGAÇÃO
+    # LAYOUT PRINCIPAL E NAVEGAÇÃO CUSTOMIZADA
     # ==========================================
     views = [view_calibration, view_acquisition, view_normalization, view_reconstruction, view_visualization,
              view_files]
     main_content_container = ft.Container(content=views[0], expand=True)
 
-    def on_nav_change(e):
-        main_content_container.content = views[e.control.selected_index]
+    # MUDANÇA AQUI: Trocado de "Pré-Proc." para "Pré-Processamento"
+    menu_labels = ["Calibração", "Aquisição", "Pré-Processamento", "Reconstrução", "Visualização", "Dados"]
+    menu_items = []
+
+    def change_route(index: int):
+        for i, item in enumerate(menu_items):
+            if i == index:
+                item.content.color = COLOR_TEXT
+                item.content.weight = "bold"
+                item.bgcolor = ft.colors.WHITE10
+            else:
+                item.content.color = COLOR_SUBTEXT
+                item.content.weight = "normal"
+                item.bgcolor = ft.colors.TRANSPARENT
+
+        main_content_container.content = views[index]
         page.update()
 
-    nav_rail = ft.NavigationRail(
-        selected_index=0,
-        label_type=ft.NavigationRailLabelType.ALL,
-        extended=True,
-        min_width=100,
-        min_extended_width=200,
-        group_alignment=-0.9,
-        destinations=[
-            ft.NavigationRailDestination(icon=ft.icons.CAMERA_OUTLINED, selected_icon=ft.icons.CAMERA,
-                                         label="Calibração"),
-            ft.NavigationRailDestination(icon=ft.icons.VIDEO_FILE_OUTLINED, selected_icon=ft.icons.VIDEO_FILE,
-                                         label="Aquisição"),
-            ft.NavigationRailDestination(icon=ft.icons.IMAGE_SEARCH_OUTLINED, selected_icon=ft.icons.IMAGE_SEARCH,
-                                         label="Normalização"),
-            ft.NavigationRailDestination(icon=ft.icons.DOMAIN, selected_icon=ft.icons.DOMAIN, label="Reconstrução"),
-            ft.NavigationRailDestination(icon=ft.icons.VIEW_IN_AR_OUTLINED, selected_icon=ft.icons.VIEW_IN_AR,
-                                         label="Visualização"),
-            ft.NavigationRailDestination(icon=ft.icons.FOLDER_OUTLINED, selected_icon=ft.icons.FOLDER_OPEN,
-                                         label="Dados"),
-        ],
-        on_change=on_nav_change,
+    # Construção dos botões de texto clicáveis
+    for idx, label in enumerate(menu_labels):
+        def make_click_callback(i=idx):
+            return lambda _: change_route(i)
+
+        menu_items.append(
+            ft.Container(
+                content=ft.Text(label, size=15, color=COLOR_TEXT if idx == 0 else COLOR_SUBTEXT,
+                                weight="bold" if idx == 0 else "normal"),
+                padding=ft.padding.only(top=15, bottom=15, left=25, right=10),
+                border_radius=0,
+                bgcolor=ft.colors.WHITE10 if idx == 0 else ft.colors.TRANSPARENT,
+                on_click=make_click_callback(),
+                ink=True,
+            )
+        )
+
+    # BARRA LATERAL: Largura ajustada de 210 para 230 para caber o texto longo confortavelmente
+    nav_sidebar = ft.Container(
+        content=ft.Column(
+            menu_items,
+            spacing=8,
+            alignment=ft.MainAxisAlignment.START,
+            horizontal_alignment=ft.CrossAxisAlignment.STRETCH
+        ),
+        width=230,
+        padding=ft.padding.only(top=20, left=15, right=0),
     )
 
     header = ft.Container(
@@ -507,19 +574,15 @@ def main(page: ft.Page):
         alignment=ft.alignment.center
     )
 
-    # 1. Criamos uma coluna que agrupa o conteúdo principal e o footer
     content_area = ft.Column(
         controls=[
-            main_content_container,  # Como ele tem expand=True, empurrará o footer para baixo
+            main_content_container,
             footer
         ],
-        expand=True  # Permite que a área ocupe o restante da tela à direita do menu
+        expand=True
     )
 
-    # 2. Colocamos a nova content_area ao lado do menu lateral, em vez de colocar só o main_content_container
-    body = ft.Row([nav_rail, ft.VerticalDivider(width=1), content_area], expand=True)
-
-    # 3. Adicionamos apenas header e body à página. O footer já está dentro do body agora.
+    body = ft.Row([nav_sidebar, ft.VerticalDivider(width=1, color=ft.colors.WHITE10), content_area], expand=True)
     page.add(header, body)
 
 

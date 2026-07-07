@@ -243,6 +243,7 @@ def executar_pipeline_reconstrucao_3d_stereo(pasta_frames: Path, pasta_projeto_s
 
     # --- DEFINIÇÃO DAS ETAPAS ATUALIZADAS ---
     etapas = [
+        
         # Etapa 1: Feature Extractor
         (construtor.montar("feature_extractor", {
             "database_path": db_path,
