@@ -7,10 +7,10 @@ import subprocess
 import os
 
 from src.camera_calibration import run_mono_calibration, run_stereo_calibration
-from src.acquisition import extract_frames_from_video
+from src.acquisition.extract_frames import extract_frames_from_video
 from src.post_processing import run_clahe_enhancement, run_resize_images
 from src.reconstruction import executar_pipeline_reconstrucao_mono, executar_pipeline_reconstrucao_3d_stereo
-from src.visualization import render_3d_model
+from src.visualization.visualization import render_3d_model
 
 
 def load_config(config_path: Path = Path("config.yaml")) -> Dict[str, Any]:

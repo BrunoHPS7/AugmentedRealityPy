@@ -2,7 +2,8 @@ import pyvista as pv
 from pathlib import Path
 
 
-def render_3d_model(model_path: Path) -> bool:
+
+def run_show_mesh(model_path: Path) -> bool:
     """
     Carrega e renderiza um modelo 3D (PLY ou OBJ) resultante da etapa de reconstrução.
     Permite a inspeção visual interativa da nuvem de pontos ou malha texturizada.
