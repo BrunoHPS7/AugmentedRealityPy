@@ -1,5 +1,5 @@
 from cli.runner_utils import ask_path, clear_screen, pause, print_header
-from src.visualization import render_3d_model
+from src.visualization.visualization import run_show_mesh
 
 
 def run_visualization_action():
@@ -10,7 +10,7 @@ def run_visualization_action():
 
     print("\n[INFO] Abrindo janela de renderização 3D...\n")
     try:
-        render_3d_model(model_path)
+        run_show_mesh(model_path)
         print("[SUCESSO] Visualização concluída.")
     except Exception as e:
         print(f"[ERRO] Falha ao renderizar o modelo 3D: {e}")
