@@ -37,7 +37,6 @@ def run_show_mesh(model_path: Path) -> bool:
         print(f"[SUCCESS] Rendering started.")
 
         # 5. EXIBIÇÃO ÚNICA E FINAL
-        # O parâmetro full_screen entra AQUI, depois de ter adicionado tudo à cena!
         plotter.show(full_screen=True)
 
         return True

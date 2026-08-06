@@ -9,5 +9,4 @@ def handle_calibration_hub_click(
     Controller do Hub de Calibração.
     Processa a escolha do card e aciona a navegação para a rota selecionada.
     """
-    # Ex: no futuro, se precisar salvar estado ou validar algo antes de trocar de tela, faz-se aqui.
     on_navigate(route_key)

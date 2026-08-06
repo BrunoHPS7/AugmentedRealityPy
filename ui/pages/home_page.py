@@ -18,7 +18,7 @@ def create_home_page(
         on_navigate: Callable[[str], None]
 ) -> ft.Container:
     """
-    Página Inicial (Dashboard/Home) com os 5 módulos principais da aplicação.
+    Página Inicial com os 5 módulos em formato de lista (com ícone padronizado).
     """
 
     def build_module_card(
@@ -28,16 +28,29 @@ def create_home_page(
             route_key: str
     ) -> ft.Container:
         return ft.Container(
-            content=ft.Column([
-                ft.Icon(icon, size=36, color=COLOR_PRIMARY),
-                ft.Text(title, size=16, weight="bold", color=COLOR_TEXT, text_align=ft.TextAlign.CENTER),
-                ft.Text(description, size=11, color=COLOR_SUBTEXT, text_align=ft.TextAlign.CENTER),
-            ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            width=200,
-            height=160,
-            padding=15,
+            content=ft.Row([
+                # Lado Esquerdo: Ícone + Título
+                ft.Row([
+                    ft.Icon(icon, size=26, color=COLOR_PRIMARY),
+                    ft.Text(title, size=15, weight="bold", color=COLOR_TEXT),
+                ], spacing=12, alignment=ft.MainAxisAlignment.START),
+
+                # Lado Direito: Descrição
+                ft.Text(
+                    description,
+                    size=12,
+                    color=COLOR_SUBTEXT,
+                    text_align=ft.TextAlign.RIGHT,
+                    expand=True
+                ),
+            ],
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER
+            ),
+            width=650,
+            padding=ft.padding.symmetric(horizontal=20, vertical=16),
             bgcolor=COLOR_CARD_BG,
-            border_radius=12,
+            border_radius=10,
             ink=True,
             on_click=lambda _: on_navigate(route_key),
             on_hover=lambda e: setattr(
@@ -47,52 +60,53 @@ def create_home_page(
             ) or e.control.update(),
         )
 
+    modules = [
+        {
+            "title": "Aquisição",
+            "description": "Captura e gerenciamento de conjuntos de imagens.",
+            "icon": ft.icons.CAMERA_ENHANCE,
+            "route_key": "acquisition"
+        },
+        {
+            "title": "Calibração",
+            "description": "Calibração intrínseca e estéreo de câmeras.",
+            "icon": ft.icons.CAMERA_ALT,
+            "route_key": "calibration_hub"
+        },
+        {
+            "title": "Reconstrução 3D",
+            "description": "Pipelines de reconstrução Monocular e Estéreo.",
+            "icon": ft.icons.VIEW_IN_AR,
+            "route_key": "reconstruction_hub"
+        },
+        {
+            "title": "Pós-Processamento",
+            "description": "Filtros, CLAHE e redimensionamento em lote.",
+            "icon": ft.icons.TUNE,
+            "route_key": "post_processing_hub"
+        },
+        {
+            "title": "Visualização 3D",
+            "description": "Visualizador de nuvens de pontos e malhas 3D.",
+            "icon": ft.icons.VIEW_IN_AR,  # <-- Atualizado para usar exatamente ft.icons.VIEW_IN_AR
+            "route_key": "visualization"
+        },
+    ]
+
     return ft.Container(
         alignment=ft.alignment.center,
         padding=20,
-        content=ft.Column([
-            ft.Icon(ft.icons.VIEW_IN_AR_ROUNDED, size=55, color=COLOR_ICON),
-            ft.Text("Plataforma de Fotogrametria e Reconstrução 3D", size=24, weight="bold", color=COLOR_TEXT,
-                    text_align=ft.TextAlign.CENTER),
-            ft.Text("Selecione um dos módulos abaixo para iniciar", color=COLOR_SUBTEXT),
-            ft.Container(height=15),
-
-            # Grid de cards com os 5 módulos principais
-            ft.Row([
+        content=ft.Column(
+            controls=[
                 build_module_card(
-                    title="Aquisição",
-                    description="Captura e gerenciamento de conjuntos de imagens.",
-                    icon=ft.icons.CAMERA_ENHANCE,
-                    route_key="acquisition"
-                ),
-                build_module_card(
-                    title="Calibração",
-                    description="Calibração intrínseca e estéreo de câmeras.",
-                    icon=ft.icons.CAMERA_ALT,
-                    route_key="calibration_hub"
-                ),
-                build_module_card(
-                    title="Reconstrução 3D",
-                    description="Pipelines de reconstrução Monocular e Estéreo.",
-                    icon=ft.icons.VIEW_IN_AR,  # <-- Ícone corrigido aqui!
-                    route_key="reconstruction_hub"
-                ),
-            ], alignment=ft.MainAxisAlignment.CENTER, spacing=15),
-
-            ft.Row([
-                build_module_card(
-                    title="Pós-Processamento",
-                    description="Filtros, CLAHE e redimensionamento em lote.",
-                    icon=ft.icons.TUNE,
-                    route_key="post_processing_hub"
-                ),
-                build_module_card(
-                    title="Visualização 3D",
-                    description="Visualizador de nuvens de pontos e malhas 3D.",
-                    icon=ft.icons.PREVIEW,
-                    route_key="visualization"
-                ),
-            ], alignment=ft.MainAxisAlignment.CENTER, spacing=15),
-
-        ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+                    title=mod["title"],
+                    description=mod["description"],
+                    icon=mod["icon"],
+                    route_key=mod["route_key"]
+                ) for mod in modules
+            ],
+            spacing=12,
+            alignment=ft.MainAxisAlignment.CENTER,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        )
     )

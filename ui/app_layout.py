@@ -17,7 +17,7 @@ def create_app_layout(page: ft.Page, selected_paths: Dict[str, Path]) -> ft.Cont
     - Cabeçalho (Header) fixo com botão voltar e título centralizado.
     - Área de conteúdo dinâmico (onde as páginas abrem).
     """
-    # Pilha para guardar o histórico de navegação (ex: ["calibration_hub", "mono_calibration"])
+    # Pilha para guardar o histórico de navegação
     navigation_stack: List[str] = ["home"]
 
     # Componentes do Cabeçalho

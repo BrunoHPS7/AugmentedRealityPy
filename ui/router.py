@@ -31,7 +31,7 @@ from ui.pages.post_processing.resize_page import create_resize_page
 ROUTE_REGISTRY = {
     # Home Principal
     "home": {
-        "title": "Início - Módulos Principais",
+        "title": "Módulos",
         "builder": create_home_page,
         "is_hub": True
     },

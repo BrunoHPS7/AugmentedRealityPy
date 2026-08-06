@@ -10,7 +10,7 @@ from cli.runner import run_cli
 def start_gui():
     """Inicia a Interface Gráfica com Flet."""
     def main_ui(page: ft.Page):
-        page.title = "Plataforma de Fotogrametria e Reconstrução 3D"
+        page.title = "Augmented Reality - UFOP"
         page.theme_mode = ft.ThemeMode.DARK
         page.window_width = 1024
         page.window_height = 768
