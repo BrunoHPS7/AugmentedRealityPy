@@ -1,15 +1,11 @@
-import cv2
 from pathlib import Path
 from tqdm import tqdm
 from typing import Callable, Optional
+from src.acquisition.acquisition_utils import *
 
 
-def _get_video_fps(capture: cv2.VideoCapture) -> float:
-    """Extrai a taxa de quadros nativa (FPS) de um objeto VideoCapture."""
-    return capture.get(cv2.CAP_PROP_FPS)
 
-
-def extract_frames_from_video(
+def run_extract_frames(
     video_path: Path,
     output_dir: Path,
     desired_fps: int,
@@ -27,7 +23,7 @@ def extract_frames_from_video(
         print(f"[ERROR] Failed to open video: {video_path}")
         return False
 
-    native_fps = _get_video_fps(capture)
+    native_fps = get_video_fps(capture)
     total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
 
     if desired_fps <= 0 or total_frames <= 0:
