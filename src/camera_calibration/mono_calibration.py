@@ -1,9 +1,8 @@
 from src.camera_calibration.calibrations_utils import *
 
 
-
 def run_mono_calibration(
-        images_dir: Path,
+        input_dir: Path,
         output_dir: Path,
         board_dimensions: Tuple[int, int],
         square_size_mm: float,
@@ -15,10 +14,10 @@ def run_mono_calibration(
     e os coeficientes de distorção da lente de uma única câmera.
     """
     # Coleta as correspondências entre o mundo 3D (teórico) e o plano 2D (foto real)
-    pts_3d, pts_2d, ref_img = run_extract_chessboard(images_dir, board_dimensions, square_size_mm, progress_callback)
+    pts_3d, pts_2d, ref_img = run_extract_chessboard(input_dir, board_dimensions, square_size_mm, progress_callback)
 
     if not pts_3d:
-        print(f"\n[ERROR] Failed to detect corners in: {images_dir}")
+        print(f"\n[ERROR] Failed to detect corners in: {input_dir}")
         return False
 
     print(f"[MATH] Calculating parameters for: {project_name}...")

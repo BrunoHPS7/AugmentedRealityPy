@@ -5,7 +5,7 @@ from src.acquisition.acquisition_utils import *
 
 
 
-def extract_frames_from_video(
+def run_extract_frames(
     video_path: Path,
     output_dir: Path,
     desired_fps: int,

@@ -21,30 +21,30 @@ def run_mono_reconstruction(pasta_frames: Path, pasta_projeto_saida: Path, progr
     pasta_esparsa.mkdir(exist_ok=True)
     pasta_densa.mkdir(exist_ok=True)
 
-    construtor = ColmapCommandBuilder()
+    constructor = ColmapCommandBuilder()
 
     # --- DEFINIÇÃO DAS ETAPAS DO PIPELINE USANDO O CONSTRUTOR ---
     etapas = [
         # Etapa 1: Feature Extractor
-        (construtor.montar("feature_extractor", {
+        (constructor.build("feature_extractor", {
             "database_path": db_path,
             "image_path": pasta_frames
         }), "Extração de Features"),
 
         # Etapa 2: Matcher
-        (construtor.montar("sequential_matcher", {
+        (constructor.build("sequential_matcher", {
             "database_path": db_path
         }), "Matcher Sequencial"),
 
         # Etapa 3: Mapper
-        (construtor.montar("mapper", {
+        (constructor.build("mapper", {
             "database_path": db_path,
             "image_path": pasta_frames,
             "output_path": pasta_esparsa
         }), "Reconstrução Esparsa"),
 
         # Etapa 4: Undistorter
-        (construtor.montar("image_undistorter", {
+        (constructor.build("image_undistorter", {
             "image_path": pasta_frames,
             "input_path": pasta_esparsa / "0",
             "output_path": pasta_densa,
@@ -52,18 +52,18 @@ def run_mono_reconstruction(pasta_frames: Path, pasta_projeto_saida: Path, progr
         }), "Retificação de Imagens"),
 
         # Etapa 5: Patch Match
-        (construtor.montar("patch_match_stereo", {
+        (constructor.build("patch_match_stereo", {
             "workspace_path": pasta_densa
         }), "Estéreo Patch Match"),
 
         # Etapa 6: Fusion
-        (construtor.montar("stereo_fusion", {
+        (constructor.build("stereo_fusion", {
             "workspace_path": pasta_densa,
             "output_path": pasta_densa / "modelo_fusionado.ply"
         }), "Fusão (Point Cloud)"),
 
         # Etapa 7: Poisson Mesher
-        (construtor.montar("poisson_mesher", {
+        (constructor.build("poisson_mesher", {
             "input_path": pasta_densa / "modelo_fusionado.ply",
             "output_path": pasta_densa / "malha_final.ply"
         }), "Geração de Malha (Poisson)")

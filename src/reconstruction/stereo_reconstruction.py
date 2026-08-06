@@ -26,7 +26,7 @@ def run_stereo_reconstruction(pasta_frames: Path, pasta_projeto_saida: Path, bas
     pasta_esparsa_rig_final.mkdir(exist_ok=True)
     pasta_densa.mkdir(exist_ok=True)
 
-    construtor = ColmapCommandBuilder()
+    constructor = ColmapCommandBuilder()
 
     # Gera o arquivo JSON antes da execução
     setup_rig(arquivo_rig, baseline_metros)
@@ -35,7 +35,7 @@ def run_stereo_reconstruction(pasta_frames: Path, pasta_projeto_saida: Path, bas
     etapas = [
 
         # Etapa 1: Feature Extractor
-        (construtor.montar("feature_extractor", {
+        (constructor.build("feature_extractor", {
             "database_path": db_path,
             "image_path": pasta_frames,
             "ImageReader.single_camera_per_folder": True,
@@ -43,19 +43,19 @@ def run_stereo_reconstruction(pasta_frames: Path, pasta_projeto_saida: Path, bas
         }), "Extração de Features (Estéreo)"),
 
         # Etapa 2: Matcher
-        (construtor.montar("sequential_matcher", {
+        (constructor.build("sequential_matcher", {
             "database_path": db_path
         }), "Matcher Sequencial"),
 
         # Etapa 3: Mapper
-        (construtor.montar("mapper", {
+        (constructor.build("mapper", {
             "database_path": db_path,
             "image_path": pasta_frames,
             "output_path": pasta_esparsa
         }), "Reconstrução Esparsa (Inicial)"),
 
         # Etapa 4a: Rig Configurator (NOVO: Vincula o JSON ao modelo esparso)
-        (construtor.montar("rig_configurator", {
+        (constructor.build("rig_configurator", {
             "database_path": db_path,
             "input_path": pasta_esparsa / "0",
             "rig_config_path": arquivo_rig,
@@ -63,7 +63,7 @@ def run_stereo_reconstruction(pasta_frames: Path, pasta_projeto_saida: Path, bas
         }), "Configuração do Rig"),
 
         # Etapa 4b: Bundle Adjuster (NOVO: Otimiza o rig em escala real)
-        (construtor.montar("bundle_adjuster", {
+        (constructor.build("bundle_adjuster", {
             "input_path": pasta_esparsa_rigged_init,
             "output_path": pasta_esparsa_rig_final,
             "BundleAdjustment.refine_rig_from_world": False,
@@ -71,7 +71,7 @@ def run_stereo_reconstruction(pasta_frames: Path, pasta_projeto_saida: Path, bas
         }), "Ajuste de Bundle (Escala Real)"),
 
         # Etapa 5: Undistorter (Usa o modelo final do Rig)
-        (construtor.montar("image_undistorter", {
+        (constructor.build("image_undistorter", {
             "image_path": pasta_frames,
             "input_path": pasta_esparsa_rig_final,
             "output_path": pasta_densa,
@@ -79,18 +79,18 @@ def run_stereo_reconstruction(pasta_frames: Path, pasta_projeto_saida: Path, bas
         }), "Retificação de Imagens"),
 
         # Etapa 6: Patch Match
-        (construtor.montar("patch_match_stereo", {
+        (constructor.build("patch_match_stereo", {
             "workspace_path": pasta_densa
         }), "Estéreo Patch Match"),
 
         # Etapa 7: Fusion
-        (construtor.montar("stereo_fusion", {
+        (constructor.build("stereo_fusion", {
             "workspace_path": pasta_densa,
             "output_path": pasta_densa / "modelo_fusionado.ply"
         }), "Fusão (Point Cloud)"),
 
         # Etapa 8: Poisson Mesher
-        (construtor.montar("poisson_mesher", {
+        (constructor.build("poisson_mesher", {
             "input_path": pasta_densa / "modelo_fusionado.ply",
             "output_path": pasta_densa / "malha_final.ply"
         }), "Geração de Malha (Poisson)")

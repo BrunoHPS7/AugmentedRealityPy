@@ -1,5 +1,5 @@
 from cli.runner_utils import ask_int, ask_path, clear_screen, pause, print_header, progress_cli
-from src.acquisition.extract_frames import extract_frames_from_video
+from src.acquisition.extract_frames import run_extract_frames
 
 
 def run_extract_frames_action():
@@ -15,7 +15,7 @@ def run_extract_frames_action():
     fps = ask_int("FPS desejado para extração (ex: 5): ", min_val=1)
 
     print("\n[INFO] Iniciando extração de frames...\n")
-    success = extract_frames_from_video(video_path, out_dir, fps, progress_cli)
+    success = run_extract_frames(video_path, out_dir, fps, progress_cli)
 
     if success:
         print("\n[SUCESSO] Frames extraídos com sucesso!")

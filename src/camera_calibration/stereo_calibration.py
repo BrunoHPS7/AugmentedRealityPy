@@ -1,10 +1,9 @@
 from src.camera_calibration.calibrations_utils import *
 
 
-
 def run_stereo_calibration(
-        folder_a: Path,
-        folder_b: Path,
+        input_dir_a: Path,
+        input_dir_b: Path,
         output_dir: Path,
         board_dimensions: Tuple[int, int],
         square_size_mm: float,
@@ -20,10 +19,10 @@ def run_stereo_calibration(
 
     # 1. Extração de pontos de controle (quinas) de forma independente para cada câmera
     print("[STEREO] Extracting corners for Camera A...")
-    obj_A, img_A, res_A = run_extract_chessboard(folder_a, board_dimensions, square_size_mm, progress_callback_a)
+    obj_A, img_A, res_A = run_extract_chessboard(input_dir_a, board_dimensions, square_size_mm, progress_callback_a)
 
     print("[STEREO] Extracting corners for Camera B...")
-    obj_B, img_B, res_B = run_extract_chessboard(folder_b, board_dimensions, square_size_mm, progress_callback_b)
+    obj_B, img_B, res_B = run_extract_chessboard(input_dir_b, board_dimensions, square_size_mm, progress_callback_b)
 
     # Garante que ambas as câmeras capturaram os alvos perfeitamente pareados
     if not img_A or not img_B or len(img_A) != len(img_B):
