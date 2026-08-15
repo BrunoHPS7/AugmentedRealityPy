@@ -1,5 +1,4 @@
-cat << 'EOF' > README.md
-# Glacier / Plataforma de Fotogrametria e Reconstrução 3D
+# AugmentedRealityPy
 
 Uma plataforma modular e escalável em Python projetada para automatizar todo o pipeline de fotogrametria. O sistema permite transformar arquivos de vídeo e conjuntos de imagens em nuvens de pontos e malhas tridimensionais (3D), oferecendo tanto uma **Interface Gráfica (GUI em Flet)** quanto uma **Interface de Linha de Comando (CLI)**.
 
